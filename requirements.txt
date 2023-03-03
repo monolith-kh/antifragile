@@ -1,0 +1,4 @@
+pydantic==1.10.0
+Twisted==22.10.0
+click==7.1.2
+flatbuffers==2.0

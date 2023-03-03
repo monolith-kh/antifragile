@@ -1,0 +1,74 @@
+namespace fbs.pilot;
+
+enum Command: byte {
+    welcome,
+    ping,
+    bubble_get,
+    bubble_status,
+    player_get,
+    player_status,
+    game_ready,
+    game_start,
+    game_finish
+}
+
+enum BubbleType: byte {
+    normal,
+    event
+}
+
+struct Vec2 {
+    x: float;
+    y: float;
+}
+
+table Bubble {
+    uid: int;
+    pos_cur: Vec2;
+    pos_target: Vec2;
+    speed: float;
+    type: BubbleType;
+}
+
+table Bubbles {
+    bubbles: [Bubble];
+}
+
+enum PlayerStatus: byte {
+    idle,
+    ready,
+    game
+}
+
+table Player {
+    uid: int;
+    username: string;
+    image_url: string;
+    score: int;
+    status: PlayerStatus;
+}
+
+table Players {
+    players: [Player];
+}
+
+union Data { Bubble, Bubbles, Player, Players }
+
+enum Sender: byte {
+    server,
+    client
+}
+
+table Request {
+    timestamp: long;
+    command: Command;
+    sender: Sender;
+    data: Data;
+}
+
+table Response {
+    timestamp: long;
+    command: Command;
+    error_code: int;
+    data: Data;
+}
