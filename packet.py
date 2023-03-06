@@ -53,7 +53,7 @@ def response_packet_builder(command: Command.Command, error_code: int = 0, data:
         username = builder.CreateString(data.username)
         image_url = builder.CreateString(data.image_url)
         Player.PlayerStart(builder)
-        Player.PlayerAddUid(builder, 1)
+        Player.PlayerAddUid(builder, data.uid)
         Player.PlayerAddUsername(builder, username)
         Player.PlayerAddImageUrl(builder, image_url)
         Player.PlayerAddScore(builder, data.score)
