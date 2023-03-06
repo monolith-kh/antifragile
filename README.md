@@ -1,5 +1,5 @@
 # antifragile
-test project about socket
+pilot project about socket
 
 ## requirements
 Python3.7 +
@@ -11,9 +11,9 @@ Python3.7 +
 > python echo_server.py
 
 ### client
-> python echo_server.py --uid=1
+> python echo_client.py --uid=1
 
-> python echo_server.py --uid={n}
+> python echo_client.py --uid={n}
 
 ```
 Usage: echo_client.py [OPTIONS]
