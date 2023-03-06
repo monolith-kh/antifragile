@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import click
+from faker import Faker
 
 from twisted.internet import reactor, protocol
 
@@ -8,13 +9,12 @@ from packet import request_packet_builder, response_packet_builder
 from fbs.pilot import Command, Sender, Request, Response, Player, Data
 import player_model
 
-HOST = 'localhost'
-PORT = 1234
 
 class EchoClient(protocol.Protocol):
     def __init__(self, uid):
+        faker = Faker('ko_KR')
         self.uid = uid
-        self.username = 'Player {}'.format(self.uid)
+        self.username = faker.name()
         self.user = player_model.Player(
             uid=self.uid,
             username=self.username,
@@ -22,6 +22,7 @@ class EchoClient(protocol.Protocol):
             score = 100 + self.uid,
             status = player_model.PlayerStatus.idle
         )
+        print(self.user)
 
     def connectionMade(self):
         print('Connected')
@@ -35,13 +36,19 @@ class EchoClient(protocol.Protocol):
         print(req.Sender())
         print(req.Data())
         print("----------")
-        if req.Command() == Command.Command.welcome:
+        if req.Command() == Command.Command.welcome and req.Sender() == Sender.Sender.server:
             res = response_packet_builder(Command.Command.welcome, error_code=0, data=self.user) 
             print(res)
             self.transport.write(bytes(res))
-            print('success contact')
+            print('success contact: {}'.format(self.user.username))
+        elif req.Command() == Command.Command.ping and req.Sender() == Sender.Sender.server:
+            res = response_packet_builder(Command.Command.ping, error_code=0) 
+            print(res)
+            self.transport.write(bytes(res))
+            print('ping command')
+            pass
         else:
-            print('Wrong command')
+            print('Wrong request')
         # self.transport.loseConnection()
 
     def connectionLost(self, reason):
@@ -54,6 +61,7 @@ class EchoFactory(protocol.ClientFactory):
         print(uid)
 
     def buildProtocol(self, addr):
+        print('addr: {}, uid: {}'.format(addr, self.uid))
         return EchoClient(self.uid)
 
     def clientConnectionFailed(self, connector, reason):
@@ -67,10 +75,12 @@ class EchoFactory(protocol.ClientFactory):
         reactor.stop()
 
 @click.command()
+@click.option('--host', default='localhost', type=click.STRING, required=True, help='set server host')
+@click.option('--port', default=1234, type=click.INT, required=True, help='set server port')
 @click.option('--uid', type=click.INT, required=True, help='set uid for player')
-def main(uid):
+def main(host, port, uid):
     ef = EchoFactory(uid)
-    reactor.connectTCP(HOST, PORT, ef)
+    reactor.connectTCP(host, port, ef)
     reactor.run()
 
 if __name__ == '__main__':

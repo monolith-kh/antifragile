@@ -2,3 +2,4 @@ pydantic==1.10.0
 Twisted==22.10.0
 click==7.1.2
 flatbuffers==2.0
+Faker==17.6.0
