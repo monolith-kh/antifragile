@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 
+import time
+from datetime import datetime
 import click
 from faker import Faker
 
-from twisted.internet import reactor, protocol
+from twisted.internet import reactor, protocol, endpoints, task
 
 from packet import request_packet_builder, response_packet_builder
 from fbs.pilot import Command, Sender, Request, Response, Player, Data
@@ -52,17 +54,19 @@ class EchoClient(protocol.Protocol):
         # self.transport.loseConnection()
 
     def connectionLost(self, reason):
-        print('Connection list.')
+        print('Connection lost.')
         print(reason)
 
 class EchoFactory(protocol.ClientFactory):
     def __init__(self, uid):
         self.uid = uid 
+        self.proto = None
         print(uid)
 
     def buildProtocol(self, addr):
         print('addr: {}, uid: {}'.format(addr, self.uid))
-        return EchoClient(self.uid)
+        self.proto = EchoClient(self.uid) 
+        return self.proto
 
     def clientConnectionFailed(self, connector, reason):
         print('Connection failed.')
@@ -74,13 +78,35 @@ class EchoFactory(protocol.ClientFactory):
         print(reason)
         reactor.stop()
 
+def run_send_loop_task(ef):
+    print('ping task: {}'.format(datetime.now()))
+    print(ef)
+    req = request_packet_builder(Command.Command.ping, Sender.Sender.client)
+    print(req)
+    if ef.proto:
+        ef.proto.transport.write(bytes(req))
+    return
+
+def cbLoopDone(result):
+    print(result)
+
+def ebLoopFailed(failure):
+    print(failure.getBriefTraceback())
+
 @click.command()
-@click.option('--host', default='localhost', type=click.STRING, required=True, help='set server host')
-@click.option('--port', default=1234, type=click.INT, required=True, help='set server port')
+@click.option('--host', default='localhost', type=click.STRING, required=True, help='set server host(default: localhost)')
+@click.option('--port', default=1234, type=click.INT, required=True, help='set server port(default: 1234)')
 @click.option('--uid', type=click.INT, required=True, help='set uid for player')
 def main(host, port, uid):
+    ep = endpoints.TCP4ClientEndpoint(reactor, host, port)
     ef = EchoFactory(uid)
-    reactor.connectTCP(host, port, ef)
+    ep.connect(ef)
+
+    loop = task.LoopingCall(run_send_loop_task, ef)
+    loop_deferred = loop.start(1.0)
+    loop_deferred.addCallback(cbLoopDone)
+    loop_deferred.addErrback(ebLoopFailed)
+
     reactor.run()
 
 if __name__ == '__main__':
