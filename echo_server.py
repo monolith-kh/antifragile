@@ -44,7 +44,7 @@ class Echo(protocol.Protocol):
         elif self.state == State.connect:
             self._handle_connect(buf)
         else:
-            print('wrong handle')
+            print('wrong state')
     
     def _handle_welcome(self, buf):
         res= Response.Response.GetRootAsResponse(buf, 0)
@@ -77,6 +77,16 @@ class Echo(protocol.Protocol):
         print(req.Data())
         if req.Command() == Command.Command.ping:
             print('request ping command OK')
+        elif req.Command() == Command.Command.bubble_get and req.Sender() == Sender.Sender.client:
+            print('request bubble_get command OK')
+            res = response_packet_builder(Command.Command.bubble_get, error_code=0, data=self.bubbles.bubbles[3]) 
+            print(res)
+            self.transport.write(bytes(res))
+        elif req.Command() == Command.Command.bubble_status and req.Sender() == Sender.Sender.client:
+            print('request bubble_status command OK')
+            res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=self.bubbles.bubbles) 
+            print(res)
+            self.transport.write(bytes(res))
         else:
             print('request wrong command')
         # message = '{}: {}'.format(self.name, data)
@@ -143,7 +153,7 @@ def main(port, ping_interval):
     ep.listen(ef)
 
     loop = task.LoopingCall(run_ping_task, ef.users, ef.bubbles)
-    loop_deferred = loop.start(ping_interval)
+    loop_deferred = loop.start(ping_interval, False)
     loop_deferred.addCallback(cbLoopDone)
     loop_deferred.addErrback(ebLoopFailed)
 

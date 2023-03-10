@@ -2,7 +2,7 @@
 
 import time
 import flatbuffers
-from fbs.pilot import Request, Response, Command, Player, Players, Sender, PlayerStatus
+from fbs.pilot import Request, Response, Command, Player, Players, Sender, PlayerStatus, Bubble, Bubbles, BubbleType, Vec2
 from typing import List, Optional, Dict, Any
 
 
@@ -61,6 +61,35 @@ def response_packet_builder(command: Command.Command, error_code: int = 0, data:
         data_pos = Player.PlayerEnd(builder)
     elif command == Command.Command.ping:
         pass
+    elif command == Command.Command.bubble_get:
+        Bubble.BubbleStart(builder)
+        Bubble.BubbleAddUid(builder, data.uid)
+        pos_cur = Vec2.CreateVec2(builder, data.pos_cur.x, data.pos_cur.y)
+        Bubble.BubbleAddPosCur(builder, pos_cur)
+        pos_target = Vec2.CreateVec2(builder, data.pos_target.x, data.pos_target.y)
+        Bubble.BubbleAddPosTarget(builder, pos_target)
+        Bubble.BubbleAddSpeed(builder, data.speed)
+        Bubble.BubbleAddType(builder, data.type)
+        data_pos = Bubble.BubbleEnd(builder)
+    elif command == Command.Command.bubble_status:
+        bubbles_list = []
+        for d in data:
+            Bubble.BubbleStart(builder)
+            Bubble.BubbleAddUid(builder, d.uid)
+            pos_cur = Vec2.CreateVec2(builder, d.pos_cur.x, d.pos_cur.y)
+            Bubble.BubbleAddPosCur(builder, pos_cur)
+            pos_target = Vec2.CreateVec2(builder, d.pos_target.x, d.pos_target.y)
+            Bubble.BubbleAddPosTarget(builder, pos_target)
+            Bubble.BubbleAddSpeed(builder, d.speed)
+            Bubble.BubbleAddType(builder, d.type)
+            bubbles_list.append(Bubble.BubbleEnd(builder))
+        Bubbles.BubblesStartBubblesVector(builder, len(bubbles_list))
+        for b in bubbles_list:
+            builder.PrependUOffsetTRelative(b)
+        vector_pos = builder.EndVector()
+        Bubbles.BubblesStart(builder)
+        Bubbles.BubblesAddBubbles(builder, vector_pos)
+        data_pos = Bubbles.BubblesEnd(builder)
     else:
         pass
 
