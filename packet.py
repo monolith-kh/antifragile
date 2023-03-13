@@ -14,20 +14,14 @@ def request_packet_builder(command: Command.Command, sender: Sender.Sender, data
         pass
     elif command == Command.Command.ping:
         pass
+    elif command == Command.Command.bubble_get:
+        pass
+    elif command == Command.Command.bubble_status:
+        pass
+    elif command == Command.Command.player_get:
+        pass
     elif command == Command.Command.player_status:
-        Players.PlayersStartPlayersVector(builder, 4)
-        for i in range(4):
-            username = builder.CreateString('player {}'.format(i+1))
-            image_url = builder.CreateString('image url {}'.format(i+1))
-            Player.PlayerStart(builder)
-            Player.PlayerAddUid(builder, i+1)
-            Player.PlayerAddUsername(builder, username)
-            Player.PlayerAddImageUrl(builder, image_url)
-            Player.PlayerAddScore(builder, 0)
-            Player.PlayerAddStatus(builder, PlayerStatus.PlayerStatus.idle)
-            p = Player.PlayerEnd(builder)
-            builder.PrependUOffsetTRelative(p)
-        players = builder.EndVector()
+        pass
     else:
         pass
 
@@ -90,6 +84,35 @@ def response_packet_builder(command: Command.Command, error_code: int = 0, data:
         Bubbles.BubblesStart(builder)
         Bubbles.BubblesAddBubbles(builder, vector_pos)
         data_pos = Bubbles.BubblesEnd(builder)
+    elif command == Command.Command.player_get:
+        username = builder.CreateString(data.username)
+        image_url = builder.CreateString(data.image_url)
+        Player.PlayerStart(builder)
+        Player.PlayerAddUid(builder, data.uid)
+        Player.PlayerAddUsername(builder, username)
+        Player.PlayerAddImageUrl(builder, image_url)
+        Player.PlayerAddScore(builder, data.score)
+        Player.PlayerAddStatus(builder, data.status)
+        data_pos = Player.PlayerEnd(builder)
+    elif command == Command.Command.player_status:
+        players_list = []
+        for d in data:
+            username = builder.CreateString(d.username)
+            image_url = builder.CreateString(d.image_url)
+            Player.PlayerStart(builder)
+            Player.PlayerAddUid(builder, d.uid)
+            Player.PlayerAddUsername(builder, username)
+            Player.PlayerAddImageUrl(builder, image_url)
+            Player.PlayerAddScore(builder, d.score)
+            Player.PlayerAddStatus(builder, d.status)
+            players_list.append(Player.PlayerEnd(builder))
+        Players.PlayersStartPlayersVector(builder, len(players_list))
+        for p in players_list:
+            builder.PrependUOffsetTRelative(p)
+        vector_pos = builder.EndVector()
+        Players.PlayersStart(builder)
+        Players.PlayersAddPlayers(builder, vector_pos)
+        data_pos = Players.PlayersEnd(builder)
     else:
         pass
 

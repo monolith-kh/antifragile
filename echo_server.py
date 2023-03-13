@@ -18,10 +18,11 @@ class State(object):
     connect = 1
 
 class Echo(protocol.Protocol):
-    def __init__(self, users, bubbles):
+    def __init__(self, users, players, bubbles):
         self.users = users
+        self.user = None
+        self.players = players
         self.bubbles = bubbles
-        self.name = None
         self.state = State.welcome
 
     def connectionMade(self):
@@ -32,9 +33,13 @@ class Echo(protocol.Protocol):
 
     def connectionLost(self, reason):
         print(reason)
-        if self.name in self.users:
-            del self.users[self.name]
-            print('connection lost: {}'.format(self.name))
+        if self.user.uid in self.users:
+            del self.users[self.user.uid]
+            for p in self.players.players:
+                if p.uid == self.user.uid:
+                    self.players.players.remove(p)
+                    print('connection lost: {}'.format(self.user.username))
+                    break
 
     def dataReceived(self, buf):
         print('Receive Data')
@@ -55,17 +60,18 @@ class Echo(protocol.Protocol):
         if res.Command() == Command.Command.welcome and res.ErrorCode() == 0:
             player = Player.Player()
             player.Init(res.Data().Bytes, res.Data().Pos)
-            pm = player_model.Player(
+            self.user = player_model.Player(
                 uid=player.Uid(),
                 username=player.Username(),
                 image_url=player.ImageUrl(),
                 score=player.Score(),
                 status=player.Status())
-            print(pm)
-            self.name = pm.username
-            self.users[self.name] = self
+            print(self.user)
+            self.users[self.user.uid] = self
+            self.players.players.append(self.user)
             self.state = State.connect
             print(self.users)
+            print(self.players)
         else:
             print('Error command')
 
@@ -87,6 +93,16 @@ class Echo(protocol.Protocol):
             res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=self.bubbles.bubbles) 
             print(res)
             self.transport.write(bytes(res))
+        elif req.Command() == Command.Command.player_get and req.Sender() == Sender.Sender.client:
+            print('request player_get command OK')
+            res = response_packet_builder(Command.Command.player_get, error_code=0, data=self.user) 
+            print(res)
+            self.transport.write(bytes(res))
+        elif req.Command() == Command.Command.player_status and req.Sender() == Sender.Sender.client:
+            print('request player_status command OK')
+            res = response_packet_builder(Command.Command.player_status, error_code=0, data=self.players.players) 
+            print(res)
+            self.transport.write(bytes(res))
         else:
             print('request wrong command')
         # message = '{}: {}'.format(self.name, data)
@@ -99,11 +115,12 @@ class Echo(protocol.Protocol):
 class EchoFactory(protocol.ServerFactory):
     def __init__(self):
         self.users = {}
+        self.players = player_model.Players()
         self.bubbles = generate_bubbles()
 
     def buildProtocol(self, addr):
         print(addr)
-        return Echo(self.users, self.bubbles)
+        return Echo(self.users, self.players, self.bubbles)
     
     def startFactory(self):
         print('start factory')

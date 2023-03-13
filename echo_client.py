@@ -8,7 +8,7 @@ from faker import Faker
 from twisted.internet import reactor, protocol, endpoints, task
 
 from packet import request_packet_builder, response_packet_builder
-from fbs.pilot import Command, Sender, Request, Response, Player, Data, Bubble, Bubbles, BubbleType
+from fbs.pilot import Command, Sender, Request, Response, Player, Players, Data, Bubble, Bubbles, BubbleType
 import player_model
 import bubble_model
 
@@ -21,13 +21,12 @@ class EchoClient(protocol.Protocol):
     def __init__(self, uid):
         self.state = State.welcome
         faker = Faker('ko_KR')
-        self.uid = uid
-        self.username = faker.name()
+        username = faker.name()
         self.user = player_model.Player(
-            uid=self.uid,
-            username=self.username,
-            image_url = 'http://{}'.format(self.username),
-            score = 100 + self.uid,
+            uid=uid,
+            username=username,
+            image_url = 'http://{}.png'.format(username),
+            score = 100 + uid,
             status = player_model.PlayerStatus.idle
         )
         print(self.user)
@@ -113,6 +112,28 @@ class EchoClient(protocol.Protocol):
                     type=bubbles.Bubbles(i).Type()
                 )
                 print(bm)
+        elif req.Command() == Command.Command.player_get:
+            player = Player.Player()
+            player.Init(req.Data().Bytes, req.Data().Pos)
+            self.user.uid = player.Uid()
+            self.user.username = player.Username()
+            self.user.image_url = player.ImageUrl()
+            self.user.score = player.Score()
+            self.user.status = player.Status()
+            print(self.user)
+        elif req.Command() == Command.Command.player_status:
+            players = Players.Players()
+            players.Init(req.Data().Bytes, req.Data().Pos)
+            print(players.PlayersLength())
+            for i in range(players.PlayersLength()):
+                pm = player_model.Player(
+                    uid=players.Players(i).Uid(),
+                    username=players.Players(i).Username(),
+                    image_url=players.Players(i).ImageUrl(),
+                    score=players.Players(i).Score(),
+                    status=players.Players(i).Status()
+                )
+                print(pm)
         else:
             print('wrong command')
 
@@ -131,6 +152,22 @@ class EchoFactory(protocol.ClientFactory):
         print('addr: {}, uid: {}'.format(addr, self.uid))
         self.proto = EchoClient(self.uid) 
         return self.proto
+
+def run_player_status_task(factory):
+    print('player status task: {}'.format(datetime.now()))
+    print(factory)
+    req = request_packet_builder(Command.Command.player_status, Sender.Sender.client)
+    print(req)
+    if factory.proto:
+        factory.proto.transport.write(bytes(req))
+
+def run_player_get_task(factory):
+    print('player get task: {}'.format(datetime.now()))
+    print(factory)
+    req = request_packet_builder(Command.Command.player_get, Sender.Sender.client)
+    print(req)
+    if factory.proto:
+        factory.proto.transport.write(bytes(req))
 
 def run_bubble_status_task(factory):
     print('bubble status task: {}'.format(datetime.now()))
@@ -170,6 +207,16 @@ def main(host, port, uid):
     ep = endpoints.TCP4ClientEndpoint(reactor, host, port)
     ef = EchoFactory(uid)
     ep.connect(ef)
+
+    loop_player_status = task.LoopingCall(run_player_status_task, ef)
+    loop_player_status_deferred = loop_player_status.start(8.0, False)
+    loop_player_status_deferred.addCallback(cbLoopDone)
+    loop_player_status_deferred.addErrback(ebLoopFailed)
+
+    loop_player_get = task.LoopingCall(run_player_get_task, ef)
+    loop_player_get_deferred = loop_player_get.start(7.0, False)
+    loop_player_get_deferred.addCallback(cbLoopDone)
+    loop_player_get_deferred.addErrback(ebLoopFailed)
 
     loop_bubble_status = task.LoopingCall(run_bubble_status_task, ef)
     loop_bubble_status_deferred = loop_bubble_status.start(10.0, False)
