@@ -103,6 +103,15 @@ class Echo(protocol.Protocol):
             res = response_packet_builder(Command.Command.player_status, error_code=0, data=self.players.players) 
             print(res)
             self.transport.write(bytes(res))
+        elif req.Command() == Command.Command.game_ready and req.Sender() == Sender.Sender.client:
+            print('request game_ready command OK')
+            self.user.status = player_model.PlayerStatus.ready
+            for p in self.players.players:
+                if p.uid == self.user.uid:
+                    p.status = player_model.PlayerStatus.ready
+            res = response_packet_builder(Command.Command.game_ready, error_code=0) 
+            print(res)
+            self.transport.write(bytes(res))
         else:
             print('request wrong command')
         # message = '{}: {}'.format(self.name, data)

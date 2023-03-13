@@ -134,6 +134,8 @@ class EchoClient(protocol.Protocol):
                     status=players.Players(i).Status()
                 )
                 print(pm)
+        elif req.Command() == Command.Command.game_ready:
+            print('response game_ready command')
         else:
             print('wrong command')
 
@@ -152,6 +154,14 @@ class EchoFactory(protocol.ClientFactory):
         print('addr: {}, uid: {}'.format(addr, self.uid))
         self.proto = EchoClient(self.uid) 
         return self.proto
+
+def run_game_ready_task(factory):
+    print('game ready task: {}'.format(datetime.now()))
+    print(factory)
+    req = request_packet_builder(Command.Command.game_ready, Sender.Sender.client)
+    print(req)
+    if factory.proto:
+        factory.proto.transport.write(bytes(req))
 
 def run_player_status_task(factory):
     print('player status task: {}'.format(datetime.now()))
@@ -207,6 +217,11 @@ def main(host, port, uid):
     ep = endpoints.TCP4ClientEndpoint(reactor, host, port)
     ef = EchoFactory(uid)
     ep.connect(ef)
+
+    loop_game_ready = task.LoopingCall(run_game_ready_task, ef)
+    loop_game_ready_deferred = loop_game_ready.start(4.5, False)
+    loop_game_ready_deferred.addCallback(cbLoopDone)
+    loop_game_ready_deferred.addErrback(ebLoopFailed)
 
     loop_player_status = task.LoopingCall(run_player_status_task, ef)
     loop_player_status_deferred = loop_player_status.start(8.0, False)
