@@ -3,7 +3,6 @@
 from datetime import datetime
 
 import click
-import faker
 
 from twisted.internet import protocol, reactor, endpoints, task
 
@@ -137,9 +136,10 @@ class EchoFactory(protocol.ServerFactory):
     def stopFactory(self):
         print('stop factory')
 
-def run_ping_task(users, bubbles):
+def run_ping_task(users, players, bubbles):
     print('ping task: {}'.format(datetime.now()))
     print(users)
+    print(players)
     print(bubbles)
     for u in users.values():
         print(u)
@@ -172,16 +172,17 @@ def generate_bubbles() -> bubble_model.Bubbles:
 
 @click.command()
 @click.option('--port', default=1234, type=click.INT, required=True, help='set port(default: 1234)')
-@click.option('--ping-interval', default=5.0, type=click.FLOAT, help='set interval of ping(default: 5.0 seconds)')
-def main(port, ping_interval):
+@click.option('--ping', default=0.0, type=click.FLOAT, help='set interval of ping(default: 0.0 seconds)')
+def main(port, ping):
     ep = endpoints.TCP4ServerEndpoint(reactor, port)
     ef = EchoFactory()
     ep.listen(ef)
 
-    loop = task.LoopingCall(run_ping_task, ef.users, ef.bubbles)
-    loop_deferred = loop.start(ping_interval, False)
-    loop_deferred.addCallback(cbLoopDone)
-    loop_deferred.addErrback(ebLoopFailed)
+    if ping:
+        loop = task.LoopingCall(run_ping_task, ef.users, ef.players, ef.bubbles)
+        loop_deferred = loop.start(ping, False)
+        loop_deferred.addCallback(cbLoopDone)
+        loop_deferred.addErrback(ebLoopFailed)
 
     print('start tcp server')
     print('connect to {} port'.format(port))
