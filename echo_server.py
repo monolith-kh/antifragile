@@ -1,10 +1,12 @@
 # -*-  coding: utf-8 -*-
 
+import sys
 from datetime import datetime
 
 import click
 
 from twisted.internet import protocol, reactor, endpoints, task
+from twisted.logger import Logger, eventAsText, FileLogObserver
 
 from packet import request_packet_builder, response_packet_builder
 from fbs.pilot import Command, Sender, Request, Response, Player, Data
@@ -18,6 +20,8 @@ class State(object):
 
 class Echo(protocol.Protocol):
     def __init__(self, users, players, bubbles):
+        self.log = Logger()
+        # self.log.observer.addObserver(FileLogObserver(sys.stdout, lambda e: eventAsText(e) + '\n'))
         self.users = users
         self.user = None
         self.players = players
@@ -25,37 +29,37 @@ class Echo(protocol.Protocol):
         self.state = State.welcome
 
     def connectionMade(self):
-        print('New connection')
+        self.log.info('New connection')
         req = request_packet_builder(Command.Command.welcome, Sender.Sender.server)
-        print(req)
+        self.log.debug(req)
         self.transport.write(bytes(req))
 
     def connectionLost(self, reason):
-        print(reason)
+        self.log.info(reason)
         if self.user.uid in self.users:
             del self.users[self.user.uid]
             for p in self.players.players:
                 if p.uid == self.user.uid:
                     self.players.players.remove(p)
-                    print('connection lost: {}'.format(self.user.username))
+                    self.log.info('connection lost: {}'.format(self.user.username))
                     break
 
     def dataReceived(self, buf):
-        print('Receive Data')
-        print(buf)
+        self.log.info('Receive Data')
+        self.log.debug(buf)
         if self.state == State.welcome:
             self._handle_welcome(buf)
         elif self.state == State.connect:
             self._handle_connect(buf)
         else:
-            print('wrong state')
+            self.log.warn('wrong state')
     
     def _handle_welcome(self, buf):
         res= Response.Response.GetRootAsResponse(buf, 0)
-        print(res.Timestamp())
-        print(res.Command())
-        print(res.ErrorCode())
-        print(res.Data())
+        self.log.debug(res.Timestamp())
+        self.log.debug(res.Command())
+        self.log.debug(res.ErrorCode())
+        self.log.debug(res.Data())
         if res.Command() == Command.Command.welcome and res.ErrorCode() == 0:
             player = Player.Player()
             player.Init(res.Data().Bytes, res.Data().Pos)
@@ -65,54 +69,54 @@ class Echo(protocol.Protocol):
                 image_url=player.ImageUrl(),
                 score=player.Score(),
                 status=player.Status())
-            print(self.user)
+            self.log.debug(self.user)
             self.users[self.user.uid] = self
             self.players.players.append(self.user)
             self.state = State.connect
-            print(self.users)
-            print(self.players)
+            self.log.debug(self.users)
+            self.log.debug(self.players)
         else:
-            print('Error command')
+            self.log.warn('Error command')
 
     def _handle_connect(self, buf):
         req = Request.Request.GetRootAsRequest(buf, 0)
-        print(req.Timestamp())
-        print(req.Command())
-        print(req.Sender())
-        print(req.Data())
+        self.log.debug(req.Timestamp())
+        self.log.debug(req.Command())
+        self.log.debug(req.Sender())
+        self.log.debug(req.Data())
         if req.Command() == Command.Command.ping:
-            print('request ping command OK')
+            self.log.info('request ping command OK')
         elif req.Command() == Command.Command.bubble_get and req.Sender() == Sender.Sender.client:
-            print('request bubble_get command OK')
+            self.log.info('request bubble_get command OK')
             res = response_packet_builder(Command.Command.bubble_get, error_code=0, data=self.bubbles.bubbles[3]) 
-            print(res)
+            self.log.debug(res)
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.bubble_status and req.Sender() == Sender.Sender.client:
-            print('request bubble_status command OK')
+            self.log.info('request bubble_status command OK')
             res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=self.bubbles.bubbles) 
-            print(res)
+            self.log.debug(res)
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.player_get and req.Sender() == Sender.Sender.client:
-            print('request player_get command OK')
+            self.log.info('request player_get command OK')
             res = response_packet_builder(Command.Command.player_get, error_code=0, data=self.user) 
-            print(res)
+            self.log.debug(res)
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.player_status and req.Sender() == Sender.Sender.client:
-            print('request player_status command OK')
+            self.log.info('request player_status command OK')
             res = response_packet_builder(Command.Command.player_status, error_code=0, data=self.players.players) 
-            print(res)
+            self.log.debug(res)
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.game_ready and req.Sender() == Sender.Sender.client:
-            print('request game_ready command OK')
+            self.log.info('request game_ready command OK')
             self.user.status = player_model.PlayerStatus.ready
             for p in self.players.players:
                 if p.uid == self.user.uid:
                     p.status = player_model.PlayerStatus.ready
             res = response_packet_builder(Command.Command.game_ready, error_code=0) 
-            print(res)
+            self.log.debug(res)
             self.transport.write(bytes(res))
         else:
-            print('request wrong command')
+            self.log.warn('request wrong command')
         # message = '{}: {}'.format(self.name, data)
         # print(message) 
         # for name, protocol in self.users.items():
@@ -136,23 +140,27 @@ class EchoFactory(protocol.ServerFactory):
     def stopFactory(self):
         print('stop factory')
 
-def run_ping_task(users, players, bubbles):
-    print('ping task: {}'.format(datetime.now()))
-    print(users)
-    print(players)
-    print(bubbles)
-    for u in users.values():
-        print(u)
-        req = request_packet_builder(Command.Command.ping, Sender.Sender.server)
-        print(req)
-        u.transport.write(bytes(req))
-    return
+class ScheduleTask:
+    log = Logger()
+    @classmethod
+    def run_ping_task(cls, users, players, bubbles):
+        cls.log.info('ping task: {}'.format(datetime.now()))
+        cls.log.info(users)
+        cls.log.info(players)
+        cls.log.info(bubbles)
+        for u in users.values():
+            cls.log.debug(u)
+            req = request_packet_builder(Command.Command.ping, Sender.Sender.server)
+            cls.log.debug(req)
+            u.transport.write(bytes(req))
 
-def cbLoopDone(result):
-    print(result)
+    @classmethod
+    def cbLoopDone(cls, result):
+        cls.log.info(result)
 
-def ebLoopFailed(failure):
-    print(failure.getBriefTraceback())
+    @classmethod
+    def ebLoopFailed(cls, failure):
+        cls.log.error(failure.getBriefTraceback())
 
 BUBBLE_COUNT = 10
 BUBBLE_POS_OFFSET = 140
@@ -174,18 +182,19 @@ def generate_bubbles() -> bubble_model.Bubbles:
 @click.option('--port', default=1234, type=click.INT, required=True, help='set port(default: 1234)')
 @click.option('--ping', default=0.0, type=click.FLOAT, help='set interval of ping(default: 0.0 seconds)')
 def main(port, ping):
+    log = Logger('MainThread')
+    log.observer.addObserver(FileLogObserver(sys.stdout, lambda e: eventAsText(e) + '\n'))
+
     ep = endpoints.TCP4ServerEndpoint(reactor, port)
     ef = EchoFactory()
     ep.listen(ef)
 
     if ping:
-        loop = task.LoopingCall(run_ping_task, ef.users, ef.players, ef.bubbles)
+        loop = task.LoopingCall(ScheduleTask.run_ping_task, ef.users, ef.players, ef.bubbles)
         loop_deferred = loop.start(ping, False)
-        loop_deferred.addCallback(cbLoopDone)
-        loop_deferred.addErrback(ebLoopFailed)
+        loop_deferred.addCallback(ScheduleTask.cbLoopDone)
+        loop_deferred.addErrback(ScheduleTask.ebLoopFailed)
 
-    print('start tcp server')
-    print('connect to {} port'.format(port))
     reactor.run()
 
 if __name__ == '__main__':
