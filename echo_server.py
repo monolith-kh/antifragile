@@ -59,7 +59,8 @@ class Echo(protocol.Protocol):
         self.log.debug(res.Command())
         self.log.debug(res.ErrorCode())
         self.log.debug(res.Data())
-        if res.Command() == Command.Command.welcome and res.ErrorCode() == 0:
+        if res.Command() == Command.Command.welcome:
+        #if res.Command() == Command.Command.welcome and res.ErrorCode() == 0:
             player = Player.Player()
             player.Init(res.Data().Bytes, res.Data().Pos)
             self.user = player_model.Player(
