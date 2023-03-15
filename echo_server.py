@@ -6,7 +6,7 @@ from datetime import datetime
 import click
 
 from twisted.internet import protocol, reactor, endpoints, task
-from twisted.logger import Logger, eventAsText, FileLogObserver
+from twisted.logger import Logger, globalLogPublisher, FilteringLogObserver, LogLevel, LogLevelFilterPredicate, textFileLogObserver
 
 from packet import request_packet_builder, response_packet_builder
 from fbs.pilot import Command, Sender, Request, Response, Player, Data
@@ -21,7 +21,6 @@ class State(object):
 class Echo(protocol.Protocol):
     def __init__(self, users, players, bubbles):
         self.log = Logger()
-        # self.log.observer.addObserver(FileLogObserver(sys.stdout, lambda e: eventAsText(e) + '\n'))
         self.users = users
         self.user = None
         self.players = players
@@ -69,7 +68,7 @@ class Echo(protocol.Protocol):
                 image_url=player.ImageUrl(),
                 score=player.Score(),
                 status=player.Status())
-            self.log.debug(self.user)
+            self.log.info(self.user)
             self.users[self.user.uid] = self
             self.players.players.append(self.user)
             self.state = State.connect
@@ -145,9 +144,9 @@ class ScheduleTask:
     @classmethod
     def run_ping_task(cls, users, players, bubbles):
         cls.log.info('ping task: {}'.format(datetime.now()))
-        cls.log.info(users)
+        cls.log.debug(users)
         cls.log.info(players)
-        cls.log.info(bubbles)
+        cls.log.debug(bubbles)
         for u in users.values():
             cls.log.debug(u)
             req = request_packet_builder(Command.Command.ping, Sender.Sender.server)
@@ -178,12 +177,24 @@ def generate_bubbles() -> bubble_model.Bubbles:
         bs_obj.bubbles.append(bm)
     return bs_obj
 
+LOG_LEVELS = dict(
+    debug=LogLevel.debug,
+    info=LogLevel.info,
+    warn=LogLevel.warn,
+    error=LogLevel.error,
+    critical=LogLevel.critical
+)
+
 @click.command()
-@click.option('--port', default=1234, type=click.INT, required=True, help='set port(default: 1234)')
-@click.option('--ping', default=0.0, type=click.FLOAT, help='set interval of ping(default: 0.0 seconds)')
-def main(port, ping):
+@click.option('--port', default=1234, type=click.INT, required=True, help='set port (default: 1234)')
+@click.option('--ping', default=0.0, type=click.FLOAT, help='set interval of ping (default: 0.0 seconds)')
+@click.option('--log-level', default='info', type=click.Choice(['debug', 'info', 'warn', 'error', 'critical'], case_sensitive=False), help='set log level (default: info)')
+def main(port, ping, log_level):
     log = Logger('MainThread')
-    log.observer.addObserver(FileLogObserver(sys.stdout, lambda e: eventAsText(e) + '\n'))
+    predicate = LogLevelFilterPredicate(defaultLogLevel=LOG_LEVELS.get(log_level))
+    observer = FilteringLogObserver(textFileLogObserver(outFile=sys.stdout), [predicate])
+    observer._encoding = 'utf-8'
+    globalLogPublisher.addObserver(observer)
 
     ep = endpoints.TCP4ServerEndpoint(reactor, port)
     ef = EchoFactory()

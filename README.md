@@ -8,17 +8,18 @@ Python3.7 +
 ## get started
 
 ### server
-> python echo_server.py --port=1234 --ping=5.0
+> python echo_server.py --port=1234 --ping=5.0 --log-level=info
 
 ```
 % python3.7 echo_server.py --help
 Usage: echo_server.py [OPTIONS]
 
 Options:
-  --port INTEGER  set port(default: 1234)  [required]
-  --ping FLOAT    set interval of ping(default: 0.0 seconds)
-  --help          Show this message and exit.
-Usage: echo_server.py [OPTIONS]
+  --port INTEGER                  set port (default: 1234)  [required]
+  --ping FLOAT                    set interval of ping (default: 0.0 seconds)
+  --log-level [debug|info|warn|error|critical]
+                                  set log level (default: info)
+  --help                          Show this message and exit.
 
 ```
 
