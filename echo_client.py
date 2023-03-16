@@ -155,6 +155,22 @@ class EchoFactory(protocol.ClientFactory):
         self.proto = EchoClient(self.uid) 
         return self.proto
 
+BUBBLE_COUNT = 10
+BUBBLE_POS_OFFSET = 140
+
+def generate_bubbles() -> bubble_model.Bubbles:
+    bs_obj = bubble_model.Bubbles()
+    for i in range(BUBBLE_COUNT):
+        vec = bubble_model.Vec2(x=i*BUBBLE_POS_OFFSET, y=0)
+        bm = bubble_model.Bubble(
+            uid=i,
+            pos_cur=vec,
+            pos_target=vec,
+            speed=0.0,
+            type=bubble_model.BubbleType.normal)
+        bs_obj.bubbles.append(bm)
+    return bs_obj
+
 def run_game_ready_task(factory):
     print('game ready task: {}'.format(datetime.now()))
     print(factory)
@@ -182,7 +198,8 @@ def run_player_get_task(factory):
 def run_bubble_status_task(factory):
     print('bubble status task: {}'.format(datetime.now()))
     print(factory)
-    req = request_packet_builder(Command.Command.bubble_status, Sender.Sender.client)
+    bubbles = generate_bubbles()
+    req = request_packet_builder(Command.Command.bubble_status, Sender.Sender.client, bubbles.bubbles)
     print(req)
     if factory.proto:
         factory.proto.transport.write(bytes(req))

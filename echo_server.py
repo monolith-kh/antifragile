@@ -9,7 +9,7 @@ from twisted.internet import protocol, reactor, endpoints, task
 from twisted.logger import Logger, globalLogPublisher, FilteringLogObserver, LogLevel, LogLevelFilterPredicate, textFileLogObserver
 
 from packet import request_packet_builder, response_packet_builder
-from fbs.pilot import Command, Sender, Request, Response, Player, Data
+from fbs.pilot import Command, Sender, Request, Response, Player, Data, Bubbles, Bubble
 import player_model
 import bubble_model
 
@@ -30,7 +30,7 @@ class Echo(protocol.Protocol):
     def connectionMade(self):
         self.log.info('New connection')
         req = request_packet_builder(Command.Command.welcome, Sender.Sender.server)
-        self.log.debug(str(req))
+        self.log.debug('Request: {}'.format(str(req)))
         self.transport.write(bytes(req))
 
     def connectionLost(self, reason):
@@ -45,7 +45,7 @@ class Echo(protocol.Protocol):
 
     def dataReceived(self, buf):
         self.log.info('Receive Data')
-        self.log.debug(str(buf))
+        self.log.debug('Bytes: {}'.format(str(buf)))
         if self.state == State.welcome:
             self._handle_welcome(buf)
         elif self.state == State.connect:
@@ -55,10 +55,10 @@ class Echo(protocol.Protocol):
     
     def _handle_welcome(self, buf):
         res= Response.Response.GetRootAsResponse(buf, 0)
-        self.log.debug(str(res.Timestamp()))
-        self.log.debug(str(res.Command()))
-        self.log.debug(str(res.ErrorCode()))
-        self.log.debug(str(res.Data()))
+        self.log.debug('Timestamp: {}'.format(str(res.Timestamp())))
+        self.log.debug('Command: {}'.format(str(res.Command())))
+        self.log.debug('ErrorCode: {}'.format(str(res.ErrorCode())))
+        self.log.debug('Data: {}'.format(str(res.Data())))
         if res.Command() == Command.Command.welcome:
         #if res.Command() == Command.Command.welcome and res.ErrorCode() == 0:
             player = Player.Player()
@@ -80,31 +80,51 @@ class Echo(protocol.Protocol):
 
     def _handle_connect(self, buf):
         req = Request.Request.GetRootAsRequest(buf, 0)
-        self.log.debug(str(req.Timestamp()))
-        self.log.debug(str(req.Command()))
-        self.log.debug(str(req.Sender()))
-        self.log.debug(str(req.Data()))
+        self.log.debug('Timestamp: {}'.format(str(req.Timestamp())))
+        self.log.debug('Command: {}'.format(str(req.Command())))
+        self.log.debug('Sender: {}'.format(str(req.Sender())))
+        self.log.debug('Data: {}'.format(str(req.Data())))
         if req.Command() == Command.Command.ping:
             self.log.info('request ping command OK')
         elif req.Command() == Command.Command.bubble_get and req.Sender() == Sender.Sender.client:
             self.log.info('request bubble_get command OK')
             res = response_packet_builder(Command.Command.bubble_get, error_code=0, data=self.bubbles.bubbles[3]) 
-            self.log.debug(str(res))
+            self.log.debug('response data: {}'.format(str(res)))
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.bubble_status and req.Sender() == Sender.Sender.client:
             self.log.info('request bubble_status command OK')
+            bubbles = Bubbles.Bubbles()
+            bubbles.Init(req.Data().Bytes, req.Data().Pos)
+            print(bubbles.BubblesLength())
+            for i in range(bubbles.BubblesLength()):
+                pos_cur = bubble_model.Vec2(
+                    x=bubbles.Bubbles(i).PosCur().X(),
+                    y=bubbles.Bubbles(i).PosCur().Y()
+                )
+                pos_target = bubble_model.Vec2(
+                    x=bubbles.Bubbles(i).PosTarget().X(),
+                    y=bubbles.Bubbles(i).PosTarget().Y()
+                )
+                bm = bubble_model.Bubble(
+                    uid=bubbles.Bubbles(i).Uid(),
+                    pos_cur=pos_cur,
+                    pos_target=pos_target,
+                    speed=bubbles.Bubbles(i).Speed(),
+                    type=bubbles.Bubbles(i).Type()
+                )
+                print(bm)
             res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=self.bubbles.bubbles) 
-            self.log.debug(str(res))
+            self.log.debug('response data: {}'.format(str(res)))
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.player_get and req.Sender() == Sender.Sender.client:
             self.log.info('request player_get command OK')
             res = response_packet_builder(Command.Command.player_get, error_code=0, data=self.user) 
-            self.log.debug(str(res))
+            self.log.debug('response data: {}'.format(str(res)))
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.player_status and req.Sender() == Sender.Sender.client:
             self.log.info('request player_status command OK')
             res = response_packet_builder(Command.Command.player_status, error_code=0, data=self.players.players) 
-            self.log.debug(str(res))
+            self.log.debug('response data: {}'.format(str(res)))
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.game_ready and req.Sender() == Sender.Sender.client:
             self.log.info('request game_ready command OK')
@@ -113,7 +133,7 @@ class Echo(protocol.Protocol):
                 if p.uid == self.user.uid:
                     p.status = player_model.PlayerStatus.ready
             res = response_packet_builder(Command.Command.game_ready, error_code=0) 
-            self.log.debug(str(res))
+            self.log.debug('response data: {}'.format(str(res)))
             self.transport.write(bytes(res))
         else:
             self.log.warn('request wrong command')
