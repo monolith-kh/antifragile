@@ -30,11 +30,11 @@ class Echo(protocol.Protocol):
     def connectionMade(self):
         self.log.info('New connection')
         req = request_packet_builder(Command.Command.welcome, Sender.Sender.server)
-        self.log.debug(req)
+        self.log.debug(str(req))
         self.transport.write(bytes(req))
 
     def connectionLost(self, reason):
-        self.log.info(reason)
+        self.log.info(str(reason))
         if self.user.uid in self.users:
             del self.users[self.user.uid]
             for p in self.players.players:
@@ -45,7 +45,7 @@ class Echo(protocol.Protocol):
 
     def dataReceived(self, buf):
         self.log.info('Receive Data')
-        self.log.debug(buf)
+        self.log.debug(str(buf))
         if self.state == State.welcome:
             self._handle_welcome(buf)
         elif self.state == State.connect:
@@ -55,10 +55,10 @@ class Echo(protocol.Protocol):
     
     def _handle_welcome(self, buf):
         res= Response.Response.GetRootAsResponse(buf, 0)
-        self.log.debug(res.Timestamp())
-        self.log.debug(res.Command())
-        self.log.debug(res.ErrorCode())
-        self.log.debug(res.Data())
+        self.log.debug(str(res.Timestamp()))
+        self.log.debug(str(res.Command()))
+        self.log.debug(str(res.ErrorCode()))
+        self.log.debug(str(res.Data()))
         if res.Command() == Command.Command.welcome:
         #if res.Command() == Command.Command.welcome and res.ErrorCode() == 0:
             player = Player.Player()
@@ -69,42 +69,42 @@ class Echo(protocol.Protocol):
                 image_url=player.ImageUrl(),
                 score=player.Score(),
                 status=player.Status())
-            self.log.info(self.user)
+            self.log.info(str(self.user))
             self.users[self.user.uid] = self
             self.players.players.append(self.user)
             self.state = State.connect
-            self.log.debug(self.users)
-            self.log.debug(self.players)
+            self.log.debug(str(self.users))
+            self.log.debug(str(self.players))
         else:
             self.log.warn('Error command')
 
     def _handle_connect(self, buf):
         req = Request.Request.GetRootAsRequest(buf, 0)
-        self.log.debug(req.Timestamp())
-        self.log.debug(req.Command())
-        self.log.debug(req.Sender())
-        self.log.debug(req.Data())
+        self.log.debug(str(req.Timestamp()))
+        self.log.debug(str(req.Command()))
+        self.log.debug(str(req.Sender()))
+        self.log.debug(str(req.Data()))
         if req.Command() == Command.Command.ping:
             self.log.info('request ping command OK')
         elif req.Command() == Command.Command.bubble_get and req.Sender() == Sender.Sender.client:
             self.log.info('request bubble_get command OK')
             res = response_packet_builder(Command.Command.bubble_get, error_code=0, data=self.bubbles.bubbles[3]) 
-            self.log.debug(res)
+            self.log.debug(str(res))
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.bubble_status and req.Sender() == Sender.Sender.client:
             self.log.info('request bubble_status command OK')
             res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=self.bubbles.bubbles) 
-            self.log.debug(res)
+            self.log.debug(str(res))
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.player_get and req.Sender() == Sender.Sender.client:
             self.log.info('request player_get command OK')
             res = response_packet_builder(Command.Command.player_get, error_code=0, data=self.user) 
-            self.log.debug(res)
+            self.log.debug(str(res))
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.player_status and req.Sender() == Sender.Sender.client:
             self.log.info('request player_status command OK')
             res = response_packet_builder(Command.Command.player_status, error_code=0, data=self.players.players) 
-            self.log.debug(res)
+            self.log.debug(str(res))
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.game_ready and req.Sender() == Sender.Sender.client:
             self.log.info('request game_ready command OK')
@@ -113,7 +113,7 @@ class Echo(protocol.Protocol):
                 if p.uid == self.user.uid:
                     p.status = player_model.PlayerStatus.ready
             res = response_packet_builder(Command.Command.game_ready, error_code=0) 
-            self.log.debug(res)
+            self.log.debug(str(res))
             self.transport.write(bytes(res))
         else:
             self.log.warn('request wrong command')
