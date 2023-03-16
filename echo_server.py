@@ -93,8 +93,16 @@ class Echo(protocol.Protocol):
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.bubble_status and req.Sender() == Sender.Sender.client:
             self.log.info('request bubble_status command OK')
+            res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=self.bubbles.bubbles) 
+            self.log.debug('response data: {}'.format(str(res)))
+            ###
+            buf = Response.Response.GetRootAsResponse(bytes(res), 0)
+            self.log.debug('Timestamp: {}'.format(str(buf.Timestamp())))
+            self.log.debug('Command: {}'.format(str(buf.Command())))
+            self.log.debug('ErrorCode: {}'.format(str(buf.ErrorCode())))
+            self.log.debug('Data: {}'.format(str(buf.Data())))
             bubbles = Bubbles.Bubbles()
-            bubbles.Init(req.Data().Bytes, req.Data().Pos)
+            bubbles.Init(buf.Data().Bytes, buf.Data().Pos)
             print(bubbles.BubblesLength())
             for i in range(bubbles.BubblesLength()):
                 pos_cur = bubble_model.Vec2(
@@ -113,8 +121,7 @@ class Echo(protocol.Protocol):
                     type=bubbles.Bubbles(i).Type()
                 )
                 print(bm)
-            res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=self.bubbles.bubbles) 
-            self.log.debug('response data: {}'.format(str(res)))
+            ###
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.player_get and req.Sender() == Sender.Sender.client:
             self.log.info('request player_get command OK')
