@@ -37,3 +37,6 @@ class Bubble(BaseModel):
 
 class Bubbles(BaseModel):
     bubbles: Optional[List[Bubble]] = []
+
+    def __str__(self):
+        return ', '.join([str(b) for b in self.bubbles])

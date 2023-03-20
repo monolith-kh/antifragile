@@ -36,3 +36,6 @@ class Player(BaseModel):
 
 class Players(BaseModel):
     players: Optional[List[Player]] = []
+
+    def __str__(self):
+        return ', '.join([str(p) for p in self.players])

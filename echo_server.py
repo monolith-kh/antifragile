@@ -13,14 +13,22 @@ from fbs.pilot import Command, Sender, Request, Response, Player, Data, Bubbles,
 import player_model
 import bubble_model
 
+LOG_LEVELS = dict(
+    debug=LogLevel.debug,
+    info=LogLevel.info,
+    warn=LogLevel.warn,
+    error=LogLevel.error,
+    critical=LogLevel.critical
+)
 
 class State(object):
     welcome = 0
     connect = 1
 
 class Echo(protocol.Protocol):
+    log = Logger()
+
     def __init__(self, users, players, bubbles):
-        self.log = Logger()
         self.users = users
         self.user = None
         self.players = players
@@ -44,7 +52,10 @@ class Echo(protocol.Protocol):
                     break
 
     def dataReceived(self, buf):
-        self.log.info('Receive Data')
+        if self.user:
+            self.log.info('{} {} Receive Data'.format(self.user.uid, self.user.username))
+        else:
+            self.log.info('Receive Data')
         self.log.debug('Bytes: {}'.format(str(buf)))
         if self.state == State.welcome:
             self._handle_welcome(buf)
@@ -95,33 +106,6 @@ class Echo(protocol.Protocol):
             self.log.info('request bubble_status command OK')
             res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=self.bubbles.bubbles) 
             self.log.debug('response data: {}'.format(str(res)))
-            ###
-            buf = Response.Response.GetRootAsResponse(bytes(res), 0)
-            self.log.debug('Timestamp: {}'.format(str(buf.Timestamp())))
-            self.log.debug('Command: {}'.format(str(buf.Command())))
-            self.log.debug('ErrorCode: {}'.format(str(buf.ErrorCode())))
-            self.log.debug('Data: {}'.format(str(buf.Data())))
-            bubbles = Bubbles.Bubbles()
-            bubbles.Init(buf.Data().Bytes, buf.Data().Pos)
-            print(bubbles.BubblesLength())
-            for i in range(bubbles.BubblesLength()):
-                pos_cur = bubble_model.Vec2(
-                    x=bubbles.Bubbles(i).PosCur().X(),
-                    y=bubbles.Bubbles(i).PosCur().Y()
-                )
-                pos_target = bubble_model.Vec2(
-                    x=bubbles.Bubbles(i).PosTarget().X(),
-                    y=bubbles.Bubbles(i).PosTarget().Y()
-                )
-                bm = bubble_model.Bubble(
-                    uid=bubbles.Bubbles(i).Uid(),
-                    pos_cur=pos_cur,
-                    pos_target=pos_target,
-                    speed=bubbles.Bubbles(i).Speed(),
-                    type=bubbles.Bubbles(i).Type()
-                )
-                print(bm)
-            ###
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.player_get and req.Sender() == Sender.Sender.client:
             self.log.info('request player_get command OK')
@@ -152,33 +136,32 @@ class Echo(protocol.Protocol):
 
 
 class EchoFactory(protocol.ServerFactory):
+    log = Logger()
     def __init__(self):
         self.users = {}
         self.players = player_model.Players()
         self.bubbles = generate_bubbles()
 
     def buildProtocol(self, addr):
-        print(addr)
+        self.log.info(str(addr))
         return Echo(self.users, self.players, self.bubbles)
     
     def startFactory(self):
-        print('start factory')
+        self.log.info('start factory')
 
     def stopFactory(self):
-        print('stop factory')
+        self.log.info('stop factory')
 
 class ScheduleTask:
     log = Logger()
     @classmethod
     def run_ping_task(cls, users, players, bubbles):
         cls.log.info('ping task: {}'.format(datetime.now()))
-        cls.log.debug(users)
-        cls.log.info(players)
-        cls.log.debug(bubbles)
+        cls.log.info(str(players))
+        cls.log.info(str(bubbles))
         for u in users.values():
-            cls.log.debug(u)
             req = request_packet_builder(Command.Command.ping, Sender.Sender.server)
-            cls.log.debug(req)
+            cls.log.debug(str(req))
             u.transport.write(bytes(req))
 
     @classmethod
@@ -205,14 +188,6 @@ def generate_bubbles() -> bubble_model.Bubbles:
         bs_obj.bubbles.append(bm)
     return bs_obj
 
-LOG_LEVELS = dict(
-    debug=LogLevel.debug,
-    info=LogLevel.info,
-    warn=LogLevel.warn,
-    error=LogLevel.error,
-    critical=LogLevel.critical
-)
-
 @click.command()
 @click.option('--port', default=1234, type=click.INT, required=True, help='set port (default: 1234)')
 @click.option('--ping', default=0.0, type=click.FLOAT, help='set interval of ping (default: 0.0 seconds)')
@@ -234,6 +209,7 @@ def main(port, ping, log_level):
         loop_deferred.addCallback(ScheduleTask.cbLoopDone)
         loop_deferred.addErrback(ScheduleTask.ebLoopFailed)
 
+    log.info('Let\'s go ANTIFRAGILE')
     reactor.run()
 
 if __name__ == '__main__':
