@@ -105,7 +105,10 @@ class Echo(protocol.Protocol):
         elif req.Command() == Command.Command.bubble_status and req.Sender() == Sender.Sender.client:
             self.log.info('request bubble_status command OK')
             res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=self.bubbles.bubbles) 
+            self.log.debug('response lenth: {}'.format(len(res)))
             self.log.debug('response data: {}'.format(str(res)))
+            self.log.debug('response lenth(bytes): {}'.format(len(bytes(res))))
+            self.log.debug('response data(bytes): {}'.format(str(bytes(res))))
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.player_get and req.Sender() == Sender.Sender.client:
             self.log.info('request player_get command OK')
@@ -124,6 +127,22 @@ class Echo(protocol.Protocol):
                 if p.uid == self.user.uid:
                     p.status = player_model.PlayerStatus.ready
             res = response_packet_builder(Command.Command.game_ready, error_code=0) 
+            self.log.debug('response data: {}'.format(str(res)))
+            self.transport.write(bytes(res))
+        elif req.Command() == Command.Command.game_start and req.Sender() == Sender.Sender.client:
+            self.log.info('request game_start command OK')
+            self.user.status = player_model.PlayerStatus.game
+            for p in self.players.players:
+                p.status = player_model.PlayerStatus.game
+            res = response_packet_builder(Command.Command.game_start, error_code=0) 
+            self.log.debug('response data: {}'.format(str(res)))
+            self.transport.write(bytes(res))
+        elif req.Command() == Command.Command.game_finish and req.Sender() == Sender.Sender.client:
+            self.log.info('request game_finish command OK')
+            self.user.status = player_model.PlayerStatus.idle
+            for p in self.players.players:
+                p.status = player_model.PlayerStatus.idle
+            res = response_packet_builder(Command.Command.game_finish, error_code=0) 
             self.log.debug('response data: {}'.format(str(res)))
             self.transport.write(bytes(res))
         else:
