@@ -236,7 +236,7 @@ def main(host, port, uid):
     ep.connect(ef)
 
     loop_game_ready = task.LoopingCall(run_game_ready_task, ef)
-    loop_game_ready_deferred = loop_game_ready.start(4.5, False)
+    loop_game_ready_deferred = loop_game_ready.start(11.5, False)
     loop_game_ready_deferred.addCallback(cbLoopDone)
     loop_game_ready_deferred.addErrback(ebLoopFailed)
 
