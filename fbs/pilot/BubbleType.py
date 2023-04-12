@@ -5,4 +5,3 @@
 class BubbleType(object):
     normal = 0
     event = 1
-

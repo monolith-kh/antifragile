@@ -10,12 +10,16 @@ class Response(object):
     __slots__ = ['_tab']
 
     @classmethod
-    def GetRootAsResponse(cls, buf, offset):
+    def GetRootAs(cls, buf, offset=0):
         n = flatbuffers.encode.Get(flatbuffers.packer.uoffset, buf, offset)
         x = Response()
         x.Init(buf, n + offset)
         return x
 
+    @classmethod
+    def GetRootAsResponse(cls, buf, offset=0):
+        """This method is deprecated. Please switch to GetRootAs."""
+        return cls.GetRootAs(buf, offset)
     # Response
     def Init(self, buf, pos):
         self._tab = flatbuffers.table.Table(buf, pos)
@@ -59,9 +63,23 @@ class Response(object):
         return None
 
 def ResponseStart(builder): builder.StartObject(5)
+def Start(builder):
+    return ResponseStart(builder)
 def ResponseAddTimestamp(builder, timestamp): builder.PrependInt64Slot(0, timestamp, 0)
+def AddTimestamp(builder, timestamp):
+    return ResponseAddTimestamp(builder, timestamp)
 def ResponseAddCommand(builder, command): builder.PrependInt8Slot(1, command, 0)
+def AddCommand(builder, command):
+    return ResponseAddCommand(builder, command)
 def ResponseAddErrorCode(builder, errorCode): builder.PrependInt32Slot(2, errorCode, 0)
+def AddErrorCode(builder, errorCode):
+    return ResponseAddErrorCode(builder, errorCode)
 def ResponseAddDataType(builder, dataType): builder.PrependUint8Slot(3, dataType, 0)
+def AddDataType(builder, dataType):
+    return ResponseAddDataType(builder, dataType)
 def ResponseAddData(builder, data): builder.PrependUOffsetTRelativeSlot(4, flatbuffers.number_types.UOffsetTFlags.py_type(data), 0)
+def AddData(builder, data):
+    return ResponseAddData(builder, data)
 def ResponseEnd(builder): return builder.EndObject()
+def End(builder):
+    return ResponseEnd(builder)

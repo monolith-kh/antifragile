@@ -6,4 +6,3 @@ class PlayerStatus(object):
     idle = 0
     ready = 1
     game = 2
-

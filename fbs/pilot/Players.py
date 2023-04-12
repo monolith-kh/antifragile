@@ -10,12 +10,16 @@ class Players(object):
     __slots__ = ['_tab']
 
     @classmethod
-    def GetRootAsPlayers(cls, buf, offset):
+    def GetRootAs(cls, buf, offset=0):
         n = flatbuffers.encode.Get(flatbuffers.packer.uoffset, buf, offset)
         x = Players()
         x.Init(buf, n + offset)
         return x
 
+    @classmethod
+    def GetRootAsPlayers(cls, buf, offset=0):
+        """This method is deprecated. Please switch to GetRootAs."""
+        return cls.GetRootAs(buf, offset)
     # Players
     def Init(self, buf, pos):
         self._tab = flatbuffers.table.Table(buf, pos)
@@ -46,6 +50,14 @@ class Players(object):
         return o == 0
 
 def PlayersStart(builder): builder.StartObject(1)
+def Start(builder):
+    return PlayersStart(builder)
 def PlayersAddPlayers(builder, players): builder.PrependUOffsetTRelativeSlot(0, flatbuffers.number_types.UOffsetTFlags.py_type(players), 0)
+def AddPlayers(builder, players):
+    return PlayersAddPlayers(builder, players)
 def PlayersStartPlayersVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+def StartPlayersVector(builder, numElems):
+    return PlayersStartPlayersVector(builder, numElems)
 def PlayersEnd(builder): return builder.EndObject()
+def End(builder):
+    return PlayersEnd(builder)

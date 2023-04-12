@@ -10,12 +10,16 @@ class Bubble(object):
     __slots__ = ['_tab']
 
     @classmethod
-    def GetRootAsBubble(cls, buf, offset):
+    def GetRootAs(cls, buf, offset=0):
         n = flatbuffers.encode.Get(flatbuffers.packer.uoffset, buf, offset)
         x = Bubble()
         x.Init(buf, n + offset)
         return x
 
+    @classmethod
+    def GetRootAsBubble(cls, buf, offset=0):
+        """This method is deprecated. Please switch to GetRootAs."""
+        return cls.GetRootAs(buf, offset)
     # Bubble
     def Init(self, buf, pos):
         self._tab = flatbuffers.table.Table(buf, pos)
@@ -64,9 +68,23 @@ class Bubble(object):
         return 0
 
 def BubbleStart(builder): builder.StartObject(5)
+def Start(builder):
+    return BubbleStart(builder)
 def BubbleAddUid(builder, uid): builder.PrependInt32Slot(0, uid, 0)
+def AddUid(builder, uid):
+    return BubbleAddUid(builder, uid)
 def BubbleAddPosCur(builder, posCur): builder.PrependStructSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(posCur), 0)
+def AddPosCur(builder, posCur):
+    return BubbleAddPosCur(builder, posCur)
 def BubbleAddPosTarget(builder, posTarget): builder.PrependStructSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(posTarget), 0)
+def AddPosTarget(builder, posTarget):
+    return BubbleAddPosTarget(builder, posTarget)
 def BubbleAddSpeed(builder, speed): builder.PrependFloat32Slot(3, speed, 0.0)
+def AddSpeed(builder, speed):
+    return BubbleAddSpeed(builder, speed)
 def BubbleAddType(builder, type): builder.PrependInt8Slot(4, type, 0)
+def AddType(builder, type):
+    return BubbleAddType(builder, type)
 def BubbleEnd(builder): return builder.EndObject()
+def End(builder):
+    return BubbleEnd(builder)

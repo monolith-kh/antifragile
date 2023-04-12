@@ -8,4 +8,4 @@ class Data(object):
     Bubbles = 2
     Player = 3
     Players = 4
-
+    Joycon = 5

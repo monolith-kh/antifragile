@@ -5,4 +5,3 @@
 class Sender(object):
     server = 0
     client = 1
-

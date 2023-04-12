@@ -10,12 +10,16 @@ class Player(object):
     __slots__ = ['_tab']
 
     @classmethod
-    def GetRootAsPlayer(cls, buf, offset):
+    def GetRootAs(cls, buf, offset=0):
         n = flatbuffers.encode.Get(flatbuffers.packer.uoffset, buf, offset)
         x = Player()
         x.Init(buf, n + offset)
         return x
 
+    @classmethod
+    def GetRootAsPlayer(cls, buf, offset=0):
+        """This method is deprecated. Please switch to GetRootAs."""
+        return cls.GetRootAs(buf, offset)
     # Player
     def Init(self, buf, pos):
         self._tab = flatbuffers.table.Table(buf, pos)
@@ -56,9 +60,23 @@ class Player(object):
         return 0
 
 def PlayerStart(builder): builder.StartObject(5)
+def Start(builder):
+    return PlayerStart(builder)
 def PlayerAddUid(builder, uid): builder.PrependInt32Slot(0, uid, 0)
+def AddUid(builder, uid):
+    return PlayerAddUid(builder, uid)
 def PlayerAddUsername(builder, username): builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(username), 0)
+def AddUsername(builder, username):
+    return PlayerAddUsername(builder, username)
 def PlayerAddImageUrl(builder, imageUrl): builder.PrependUOffsetTRelativeSlot(2, flatbuffers.number_types.UOffsetTFlags.py_type(imageUrl), 0)
+def AddImageUrl(builder, imageUrl):
+    return PlayerAddImageUrl(builder, imageUrl)
 def PlayerAddScore(builder, score): builder.PrependInt32Slot(3, score, 0)
+def AddScore(builder, score):
+    return PlayerAddScore(builder, score)
 def PlayerAddStatus(builder, status): builder.PrependInt8Slot(4, status, 0)
+def AddStatus(builder, status):
+    return PlayerAddStatus(builder, status)
 def PlayerEnd(builder): return builder.EndObject()
+def End(builder):
+    return PlayerEnd(builder)

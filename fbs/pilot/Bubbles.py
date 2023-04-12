@@ -10,12 +10,16 @@ class Bubbles(object):
     __slots__ = ['_tab']
 
     @classmethod
-    def GetRootAsBubbles(cls, buf, offset):
+    def GetRootAs(cls, buf, offset=0):
         n = flatbuffers.encode.Get(flatbuffers.packer.uoffset, buf, offset)
         x = Bubbles()
         x.Init(buf, n + offset)
         return x
 
+    @classmethod
+    def GetRootAsBubbles(cls, buf, offset=0):
+        """This method is deprecated. Please switch to GetRootAs."""
+        return cls.GetRootAs(buf, offset)
     # Bubbles
     def Init(self, buf, pos):
         self._tab = flatbuffers.table.Table(buf, pos)
@@ -46,6 +50,14 @@ class Bubbles(object):
         return o == 0
 
 def BubblesStart(builder): builder.StartObject(1)
+def Start(builder):
+    return BubblesStart(builder)
 def BubblesAddBubbles(builder, bubbles): builder.PrependUOffsetTRelativeSlot(0, flatbuffers.number_types.UOffsetTFlags.py_type(bubbles), 0)
+def AddBubbles(builder, bubbles):
+    return BubblesAddBubbles(builder, bubbles)
 def BubblesStartBubblesVector(builder, numElems): return builder.StartVector(4, numElems, 4)
+def StartBubblesVector(builder, numElems):
+    return BubblesStartBubblesVector(builder, numElems)
 def BubblesEnd(builder): return builder.EndObject()
+def End(builder):
+    return BubblesEnd(builder)
