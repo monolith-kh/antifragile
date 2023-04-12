@@ -8,7 +8,27 @@ Python3.7 +
 ## get started
 
 ### server
-> python echo_server.py --port=1234 --ping=5.0 --log-level=info
+> python tts.py --port=1234 --ping=5.0 --log-level=info
+
+```
+python tts.py --help
+Usage: tts.py [OPTIONS]
+
+Options:
+  --port INTEGER                  set port (default: 1234)  [required]
+  --ping FLOAT                    set interval of ping (default: 0.0 seconds)
+  --log-level [debug|info|warn|error|critical]
+                                  set log level (default: info)
+  --rtls TEXT                     set rtls host:port(default:
+                                  192.168.40.254:9999)  [required]
+
+  --joycon                        get status of joycon(left/right)
+  --help                          Show this message and exit.
+
+```
+
+
+> (Deprecated) python echo_server.py --port=1234 --ping=5.0 --log-level=info
 
 ```
 % python3.7 echo_server.py --help
@@ -39,3 +59,9 @@ Options:
   --help          Show this message and exit.
 
 ```
+
+## how to flatbuffers class
+### Python
+> flatc --python antifragile.fbs
+### CSharp
+> flatc --csharp antifragile.fbs
