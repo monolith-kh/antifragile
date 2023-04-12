@@ -8,9 +8,10 @@ from faker import Faker
 from twisted.internet import reactor, protocol, endpoints, task
 
 from packet import request_packet_builder, response_packet_builder
-from fbs.pilot import Command, Sender, Request, Response, Player, Players, Data, Bubble, Bubbles, BubbleType
+from fbs.pilot import Command, Sender, Request, Response, Player, Players, Data, Bubble, Bubbles, BubbleType, Joycon
 import player_model
 import bubble_model
+import joycon_model
 
 
 class State(object):
@@ -141,6 +142,15 @@ class EchoClient(protocol.Protocol):
                 print(pm)
         elif req.Command() == Command.Command.game_ready:
             print('response game_ready command')
+        elif req.Command() == Command.Command.joycon:
+            joycon = Joycon.Joycon()
+            joycon.Init(req.Data().Bytes, req.Data().Pos)
+            print('right gyro x: {}'.format(joycon.RightGyroX()))
+            print('right a button: {}'.format(joycon.RightA()))
+        elif req.Command() == Command.Command.shoot:
+            print('shoot event')
+        elif req.Command() == Command.Command.reload:
+            print('reload event')
         else:
             print('wrong command')
 

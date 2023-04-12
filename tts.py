@@ -1,6 +1,7 @@
 # -*-  coding: utf-8 -*-
 
 import sys
+import time
 from datetime import datetime
 
 import click
@@ -9,9 +10,10 @@ from twisted.internet import protocol, reactor, endpoints, task
 from twisted.logger import Logger, globalLogPublisher, FilteringLogObserver, LogLevel, LogLevelFilterPredicate, textFileLogObserver
 
 from packet import request_packet_builder, response_packet_builder
-from fbs.pilot import Command, Sender, Request, Response, Player, Data, Bubbles, Bubble
+from fbs.pilot import Command, Sender, Request, Response, Player, Data, Bubbles, Bubble, Joycon
 import player_model
 import bubble_model
+import joycon_model
 
 from ringggo_packet import Header, PositionObject, PositionNoti, Packet
 
@@ -362,6 +364,15 @@ class EchoFactory(protocol.ServerFactory):
 
 class ScheduleTask:
     log = Logger()
+
+    BULLET_MAX = 5
+    FRAME = 60
+    GYRO_Y_THRESHOLD = -5000
+    RELOAD_TIME_OFFSET = 1.5
+
+    prev_zr = 0
+    reload_time = time.time()
+
     @classmethod
     def run_ping_task(cls, users, players, bubbles):
         cls.log.info('ping task: {}'.format(datetime.now()))
@@ -372,10 +383,81 @@ class ScheduleTask:
             req = request_packet_builder(Command.Command.ping, Sender.Sender.server)
             cls.log.debug(str(req))
             u.transport.write(bytes(req))
-        # print(JoyconService().get_status_left())
-        # print(JoyconService().get_status_right())
-        # JoyconService().set_rumble_simple_left()
-        # JoyconService().set_rumble_simple_right()
+
+    @classmethod
+    def run_joycon_task(cls, users):
+        cls.log.debug('joycon task: {}'.format(datetime.now()))
+        left = JoyconService().get_status_left()
+        right = JoyconService().get_status_right()
+        if left and right:
+            joycon = joycon_model.Joycon(
+                right_y=right['buttons']['right']['y'],
+                right_x=right['buttons']['right']['x'],
+                right_a=right['buttons']['right']['a'],
+                right_b=right['buttons']['right']['b'],
+                right_r=right['buttons']['right']['r'],
+                right_zr=right['buttons']['right']['zr'],
+                right_horizontal=right['analog-sticks']['right']['horizontal'],
+                right_vertical=right['analog-sticks']['right']['vertical'],
+                right_accel_x=right['accel']['x'],
+                right_accel_y=right['accel']['y'],
+                right_accel_z=right['accel']['z'],
+                right_gyro_x=right['gyro']['x'],
+                right_gyro_y=right['gyro']['y'],
+                right_gyro_z=right['gyro']['z'],
+                right_battery_charging=right['battery']['charging'],
+                right_battery_level=right['battery']['level'],
+                right_home=right['buttons']['shared']['home'],
+
+                left_down=left['buttons']['left']['down'],
+                left_up=left['buttons']['left']['up'],
+                left_right=left['buttons']['left']['right'],
+                left_left=left['buttons']['left']['left'],
+                left_l=left['buttons']['left']['l'],
+                left_zl=left['buttons']['left']['zl'],
+                left_horizontal=left['analog-sticks']['left']['horizontal'],
+                left_vertical=left['analog-sticks']['left']['vertical'],
+                left_accel_x=left['accel']['x'],
+                left_accel_y=left['accel']['y'],
+                left_accel_z=left['accel']['z'],
+                left_gyro_x=left['gyro']['x'],
+                left_gyro_y=left['gyro']['y'],
+                left_gyro_z=left['gyro']['z'],
+                left_battery_charging=left['battery']['charging'],
+                left_battery_level=left['battery']['level']
+            )
+            for u in users.values():
+                req = request_packet_builder(Command.Command.joycon, Sender.Sender.server, joycon)
+                cls.log.debug(str(req))
+                u.transport.write(bytes(req))
+        else:
+            cls.log.error('check paring joycon left: {}, right: {}'.format(left, right))
+
+    @classmethod
+    def run_joycon_event_task(cls, users):
+        cls.log.debug('joycon event task: {}'.format(datetime.now()))
+        left = JoyconService().get_status_left()
+        right = JoyconService().get_status_right()
+        if left and right:
+            if right['gyro']['y'] < cls.GYRO_Y_THRESHOLD and (time.time() - cls.reload_time) > cls.RELOAD_TIME_OFFSET:
+                cls.reload_time = time.time()
+                cls.log.info('reload event')
+                JoyconService().set_rumble_right(1.2, 0.3)
+                JoyconService().set_rumble_left(0.5, 0.5)
+                for u in users.values():
+                    req = request_packet_builder(Command.Command.reload, Sender.Sender.server)
+                    cls.log.debug(str(req))
+                    u.transport.write(bytes(req))
+            if right['buttons']['right']['zr'] == 1 and cls.prev_zr == 0:
+                cls.log.info('shoot event')
+                JoyconService().set_rumble_right(1.2, 0.3)
+                JoyconService().set_rumble_left(0.5, 0.5)
+                for u in users.values():
+                    req = request_packet_builder(Command.Command.shoot, Sender.Sender.server)
+                    cls.log.debug(str(req))
+                    u.transport.write(bytes(req))
+            cls.prev_zr = right['buttons']['right']['zr']
+
 
     @classmethod
     def cbLoopDone(cls, result):
@@ -406,7 +488,8 @@ def generate_bubbles() -> bubble_model.Bubbles:
 @click.option('--ping', default=0.0, type=click.FLOAT, help='set interval of ping (default: 0.0 seconds)')
 @click.option('--log-level', default='info', type=click.Choice(['debug', 'info', 'warn', 'error', 'critical'], case_sensitive=False), help='set log level (default: info)')
 @click.option('--rtls', default='192.168.40.254:9999', type=click.STRING, required=True, help='set rtls host:port(default: 192.168.40.254:9999)')
-def main(port, ping, log_level, rtls):
+@click.option('--joycon', is_flag=True, help='get status of joycon(left/right)')
+def main(port, ping, log_level, rtls, joycon):
     log = Logger('MainThread')
     predicate = LogLevelFilterPredicate(defaultLogLevel=LOG_LEVELS.get(log_level))
     observer = FilteringLogObserver(textFileLogObserver(outFile=sys.stdout), [predicate])
@@ -420,10 +503,21 @@ def main(port, ping, log_level, rtls):
     ep.listen(ef)
 
     if ping:
-        loop = task.LoopingCall(ScheduleTask.run_ping_task, ef.users, ef.players, ef.bubbles)
-        loop_deferred = loop.start(ping, False)
-        loop_deferred.addCallback(ScheduleTask.cbLoopDone)
-        loop_deferred.addErrback(ScheduleTask.ebLoopFailed)
+        loop_ping = task.LoopingCall(ScheduleTask.run_ping_task, ef.users, ef.players, ef.bubbles)
+        loop_ping_deferred = loop_ping.start(ping, False)
+        loop_ping_deferred.addCallback(ScheduleTask.cbLoopDone)
+        loop_ping_deferred.addErrback(ScheduleTask.ebLoopFailed)
+
+    if joycon:
+        loop_joycon = task.LoopingCall(ScheduleTask.run_joycon_task, ef.users)
+        loop_joycon_deferred = loop_joycon.start(0.1, False)
+        loop_joycon_deferred.addCallback(ScheduleTask.cbLoopDone)
+        loop_joycon_deferred.addErrback(ScheduleTask.ebLoopFailed)
+
+    loop_joycon_event = task.LoopingCall(ScheduleTask.run_joycon_event_task, ef.users)
+    loop_joycon_event_deferred = loop_joycon_event.start(0.1, False)
+    loop_joycon_event_deferred.addCallback(ScheduleTask.cbLoopDone)
+    loop_joycon_event_deferred.addErrback(ScheduleTask.ebLoopFailed)
 
     log.info('Let\'s go ANTIFRAGILE')
     rhost, rport = rtls.split(':')
