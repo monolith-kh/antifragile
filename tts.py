@@ -148,13 +148,31 @@ class JoyconService(metaclass=Singleton):
             self.joycon_l.rumble_simple()
 
 
-class Rtls(protocol.DatagramProtocol):
+class RtlsService(metaclass=Singleton):
+    def __init__(self, *args, **kwargs):
+        self.cars = dict()
+    
+    def get_bubbles(self) -> bubble_model.Bubbles:
+        bs_obj = bubble_model.Bubbles()
+        for k, v in self.cars.items():
+            vec = bubble_model.Vec2(x=v['x'], y=v['y'])
+            bm = bubble_model.Bubble(
+                uid=k,
+                pos_cur=vec,
+                pos_target=vec,
+                speed=0.0,
+                type=bubble_model.BubbleType.event)
+            bs_obj.bubbles.append(bm)
+        return bs_obj
+
+
+class RtlsProtocol(protocol.DatagramProtocol):
     log = Logger()
 
-    def __init__(self, host, port, cars = {}):
+    def __init__(self, host, port):
         self.host = host
         self.port = port
-        self.cars = cars
+        RtlsService()
 
     def startProtocol(self):
         self.log.info('New connection')
@@ -174,12 +192,12 @@ class Rtls(protocol.DatagramProtocol):
         p = Packet.from_bytes(data)
         self.log.debug('header code: {}'.format(p.header.code))
         for c in p.body:
-            self.cars[c.object_number] = dict(
+            RtlsService().cars[c.object_number] = dict(
                 x=c.position_noti.position_x,
                 y=c.position_noti.position_y
             )
             self.log.debug('{}, {}, {}'.format(c.object_number, c.position_noti.position_x, c.position_noti.position_y))
-        self.log.info('car list: {cars}'.format(cars=self.cars))
+        self.log.debug('car list: {cars}'.format(cars=RtlsService().cars))
         # packet = Packet(
         #     sender=Header.SENDER_ADMIN,
         #     code=Header.PK_POSITION_LISTEN_STOP)
@@ -224,11 +242,22 @@ class Echo(protocol.Protocol):
             self.log.info('{} {} Receive Data'.format(self.user.uid, self.user.username))
         else:
             self.log.info('Receive Data')
+        self.log.info('Bytes Length: {}'.format(len(buf)))
         self.log.debug('Bytes: {}'.format(str(buf)))
+        pac_size = int.from_bytes(buf[0:2], 'big')
+        if len(buf) == pac_size:
+            self.log.info('valid packet size ===  header: {}, packet: {}'.format(pac_size, len(buf)))
+            pac = buf[2:]
+        elif len(buf) > pac_size:
+            self.log.warn('!!! large packet size <<< header: {}, packet: {}'.format(pac_size, len(buf)))
+            pac = buf[:pac_size][2:]
+        else:
+            self.log.warn('!!! small packet size >>> header: {}, packet: {}'.format(pac_size, len(buf)))
+            return
         if self.state == State.welcome:
-            self._handle_welcome(buf)
+            self._handle_welcome(pac)
         elif self.state == State.connect:
-            self._handle_connect(buf)
+            self._handle_connect(pac)
         else:
             self.log.warn('wrong state')
     
@@ -259,34 +288,26 @@ class Echo(protocol.Protocol):
 
     def _handle_connect(self, buf):
         req = Request.Request.GetRootAsRequest(buf, 0)
-        self.log.debug('Timestamp: {}'.format(str(req.Timestamp())))
-        self.log.debug('Command: {}'.format(str(req.Command())))
-        self.log.debug('Sender: {}'.format(str(req.Sender())))
-        self.log.debug('Data: {}'.format(str(req.Data())))
+        self.log.debug('Handler: {}, {}, {}, {}'.format(str(req.Timestamp()), str(req.Command()), str(req.Sender()), str(req.Data())))
         if req.Command() == Command.Command.ping:
             self.log.info('request ping command OK')
+            res = bytearray()
         elif req.Command() == Command.Command.bubble_get and req.Sender() == Sender.Sender.client:
             self.log.info('request bubble_get command OK')
-            res = response_packet_builder(Command.Command.bubble_get, error_code=0, data=self.bubbles.bubbles[3]) 
-            self.log.debug('response data: {}'.format(str(res)))
+            res = response_packet_builder(Command.Command.bubble_get, error_code=0, data=self.bubbles.bubbles[3])
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.bubble_status and req.Sender() == Sender.Sender.client:
             self.log.info('request bubble_status command OK')
-            res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=self.bubbles.bubbles) 
-            self.log.debug('response lenth: {}'.format(len(res)))
-            self.log.debug('response data: {}'.format(str(res)))
-            self.log.debug('response lenth(bytes): {}'.format(len(bytes(res))))
-            self.log.debug('response data(bytes): {}'.format(str(bytes(res))))
+            res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=RtlsService().get_bubbles().bubbles)
+            # res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=self.bubbles.bubbles)
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.player_get and req.Sender() == Sender.Sender.client:
             self.log.info('request player_get command OK')
-            res = response_packet_builder(Command.Command.player_get, error_code=0, data=self.user) 
-            self.log.debug('response data: {}'.format(str(res)))
+            res = response_packet_builder(Command.Command.player_get, error_code=0, data=self.user)
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.player_status and req.Sender() == Sender.Sender.client:
             self.log.info('request player_status command OK')
-            res = response_packet_builder(Command.Command.player_status, error_code=0, data=self.players.players) 
-            self.log.debug('response data: {}'.format(str(res)))
+            res = response_packet_builder(Command.Command.player_status, error_code=0, data=self.players.players)
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.game_ready and req.Sender() == Sender.Sender.client:
             self.log.info('request game_ready command OK')
@@ -295,7 +316,6 @@ class Echo(protocol.Protocol):
                 if p.uid == self.user.uid:
                     p.status = player_model.PlayerStatus.ready
             res = response_packet_builder(Command.Command.game_ready, error_code=0) 
-            self.log.debug('response data: {}'.format(str(res)))
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.game_start and req.Sender() == Sender.Sender.client:
             self.log.info('request game_start command OK')
@@ -303,7 +323,6 @@ class Echo(protocol.Protocol):
             for p in self.players.players:
                 p.status = player_model.PlayerStatus.game
             res = response_packet_builder(Command.Command.game_start, error_code=0) 
-            self.log.debug('response data: {}'.format(str(res)))
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.game_finish and req.Sender() == Sender.Sender.client:
             self.log.info('request game_finish command OK')
@@ -311,10 +330,12 @@ class Echo(protocol.Protocol):
             for p in self.players.players:
                 p.status = player_model.PlayerStatus.idle
             res = response_packet_builder(Command.Command.game_finish, error_code=0) 
-            self.log.debug('response data: {}'.format(str(res)))
             self.transport.write(bytes(res))
         else:
             self.log.warn('request wrong command')
+        self.log.info('response lenth: {}'.format(len(res)))
+        self.log.debug('response data: {}'.format(str(res)))
+
         # message = '{}: {}'.format(self.name, data)
         # print(message) 
         # for name, protocol in self.users.items():
@@ -345,15 +366,16 @@ class ScheduleTask:
     def run_ping_task(cls, users, players, bubbles):
         cls.log.info('ping task: {}'.format(datetime.now()))
         cls.log.info(str(players))
-        cls.log.info(str(bubbles))
+        # cls.log.info(str(bubbles))
+        cls.log.info(str(RtlsService().get_bubbles()))
         for u in users.values():
             req = request_packet_builder(Command.Command.ping, Sender.Sender.server)
             cls.log.debug(str(req))
             u.transport.write(bytes(req))
-        print(JoyconService().get_status_left())
-        print(JoyconService().get_status_right())
-        JoyconService().set_rumble_simple_left()
-        JoyconService().set_rumble_simple_right()
+        # print(JoyconService().get_status_left())
+        # print(JoyconService().get_status_right())
+        # JoyconService().set_rumble_simple_left()
+        # JoyconService().set_rumble_simple_right()
 
     @classmethod
     def cbLoopDone(cls, result):
@@ -405,7 +427,7 @@ def main(port, ping, log_level, rtls):
 
     log.info('Let\'s go ANTIFRAGILE')
     rhost, rport = rtls.split(':')
-    reactor.listenUDP(0, Rtls(rhost, int(rport), {}))
+    reactor.listenUDP(0, RtlsProtocol(rhost, int(rport)))
     reactor.run()
 
 if __name__ == '__main__':

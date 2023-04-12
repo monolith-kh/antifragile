@@ -36,7 +36,9 @@ def request_packet_builder(command: Command.Command, sender: Sender.Sender, data
 
     builder.Finish(request_pos)
 
-    return builder.Output()
+    res_body = builder.Output()
+    return bytearray((len(res_body)+2).to_bytes(2, 'big')+res_body)
+
 
 
 def response_packet_builder(command: Command.Command, error_code: int = 0, data: Optional[Any] = None) -> bytes:
@@ -127,5 +129,5 @@ def response_packet_builder(command: Command.Command, error_code: int = 0, data:
 
     builder.Finish(response_pos)
 
-    return builder.Output()
-
+    res_body = builder.Output()
+    return bytearray((len(res_body)+2).to_bytes(2, 'big')+res_body)

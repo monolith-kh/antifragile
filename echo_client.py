@@ -37,10 +37,15 @@ class EchoClient(protocol.Protocol):
     def dataReceived(self, buf):
         print('Receive Data')
         print('Server said: {}'.format(buf))
+        if len(buf) == int.from_bytes(buf[0:2], 'big'):
+            print('valid packet size')
+        else:
+            print('!!! invalid packet size !!! header: {}, packet: {}'.format(int.from_bytes(buf[0:2], 'big'), len(buf)))
+            return
         if self.state == State.welcome:
-            self._handle_welcome(buf)
+            self._handle_welcome(buf[2:])
         elif self.state == State.connect:
-            self._handle_connect(buf)
+            self._handle_connect(buf[2:])
         else:
             print('wrong state')
 
@@ -241,7 +246,7 @@ def main(host, port, uid):
     loop_game_ready_deferred.addErrback(ebLoopFailed)
 
     loop_player_status = task.LoopingCall(run_player_status_task, ef)
-    loop_player_status_deferred = loop_player_status.start(8.0, False)
+    loop_player_status_deferred = loop_player_status.start(2.0, False)
     loop_player_status_deferred.addCallback(cbLoopDone)
     loop_player_status_deferred.addErrback(ebLoopFailed)
 
@@ -251,17 +256,17 @@ def main(host, port, uid):
     loop_player_get_deferred.addErrback(ebLoopFailed)
 
     loop_bubble_status = task.LoopingCall(run_bubble_status_task, ef)
-    loop_bubble_status_deferred = loop_bubble_status.start(10.0, False)
+    loop_bubble_status_deferred = loop_bubble_status.start(4.0, False)
     loop_bubble_status_deferred.addCallback(cbLoopDone)
     loop_bubble_status_deferred.addErrback(ebLoopFailed)
 
     loop_bubble_get = task.LoopingCall(run_bubble_get_task, ef)
-    loop_bubble_get_deferred = loop_bubble_get.start(2.0, False)
+    loop_bubble_get_deferred = loop_bubble_get.start(9.0, False)
     loop_bubble_get_deferred.addCallback(cbLoopDone)
     loop_bubble_get_deferred.addErrback(ebLoopFailed)
 
     loop_ping = task.LoopingCall(run_send_loop_task, ef)
-    loop_ping_deferred = loop_ping.start(5.0, False)
+    loop_ping_deferred = loop_ping.start(10.0, False)
     loop_ping_deferred.addCallback(cbLoopDone)
     loop_ping_deferred.addErrback(ebLoopFailed)
 
