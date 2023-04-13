@@ -12,6 +12,7 @@ enum Command: byte {
     game_finish,
     joycon,
     shoot,
+    shoot_release,
     reload
 }
 

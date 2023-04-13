@@ -14,4 +14,5 @@ class Command(object):
     game_finish = 8
     joycon = 9
     shoot = 10
-    reload = 11
+    shoot_release = 11
+    reload = 12

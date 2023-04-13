@@ -378,11 +378,15 @@ class ScheduleTask:
         cls.log.info('ping task: {}'.format(datetime.now()))
         cls.log.info(str(players))
         # cls.log.info(str(bubbles))
-        cls.log.info(str(RtlsService().get_bubbles()))
+        # cls.log.info(str(RtlsService().get_bubbles()))
         for u in users.values():
             req = request_packet_builder(Command.Command.ping, Sender.Sender.server)
             cls.log.debug(str(req))
             u.transport.write(bytes(req))
+
+            res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=RtlsService().get_bubbles().bubbles)
+            u.transport.write(bytes(res))
+
 
     @classmethod
     def run_joycon_task(cls, users):
@@ -456,7 +460,19 @@ class ScheduleTask:
                     req = request_packet_builder(Command.Command.shoot, Sender.Sender.server)
                     cls.log.debug(str(req))
                     u.transport.write(bytes(req))
+            if right['buttons']['right']['zr'] == 0 and cls.prev_zr == 1:
+                cls.log.info('shoot release event')
+                for u in users.values():
+                    req = request_packet_builder(Command.Command.shoot_release, Sender.Sender.server)
+                    cls.log.debug(str(req))
+                    u.transport.write(bytes(req))
             cls.prev_zr = right['buttons']['right']['zr']
+        else:
+            print('disconnected')
+            if JoyconService().set_paring_left():
+                print('paired left')
+            if JoyconService().set_paring_right():
+                print('paired right')
 
 
     @classmethod
