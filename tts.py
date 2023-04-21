@@ -2,11 +2,16 @@
 
 import sys
 import time
+import signal
+import threading
 from datetime import datetime
 
 import click
 
-from twisted.internet import protocol, reactor, endpoints, task
+import arcade
+import random
+
+from twisted.internet import protocol, reactor, endpoints, task, threads
 from twisted.logger import Logger, globalLogPublisher, FilteringLogObserver, LogLevel, LogLevelFilterPredicate, textFileLogObserver
 
 from packet import request_packet_builder, response_packet_builder
@@ -148,6 +153,356 @@ class JoyconService(metaclass=Singleton):
         if self.is_connect_left():
             self.joycon_l.enable_vibration()
             self.joycon_l.rumble_simple()
+
+
+ARENA_WIDTH = 1900
+ARENA_HEIGHT = 1380
+
+SCREEN_SCALING = 1.0
+SCREEN_WIDTH = ARENA_WIDTH * SCREEN_SCALING
+SCREEN_HEIGHT = ARENA_HEIGHT * SCREEN_SCALING
+SCREEN_TITLE = "Starting Game(by RTLS - RINGGGO)"
+
+SPRITE_SCALING_PLAYER = 0.5
+# SPRITE_SCALING_PLAYER = 0.5
+SPRITE_SCALING_COIN = 1.0
+# SPRITE_SCALING_COIN = 0.2
+COIN_COUNT_MAX = 30
+SPRITE_SCALING_SHIP = 1.0
+
+PLAYER_START_X = 100
+PLAYER_START_Y = 100
+
+
+class CrosshairSprite(arcade.Sprite):
+
+    def __init__(self, filename, sprite_scaling):
+
+        super().__init__(filename, sprite_scaling)
+
+        self.center_x = PLAYER_START_X
+        self.center_y = PLAYER_START_Y
+
+        self.cur_texture = 0
+        self.unlock_textures = [
+            arcade.load_texture('./resources/images/crosshair137.png'),
+            arcade.load_texture('./resources/images/crosshair138.png')
+        ]
+        self.lock_textures = [
+            arcade.load_texture('./resources/images/crosshair132.png'),
+            arcade.load_texture('./resources/images/crosshair132.png')
+        ]
+        self.move_textures = self.unlock_textures
+        self.texture = self.move_textures[self.cur_texture]
+
+    def update_animation(self, delta_time: float = 1 / 60):
+        if self.cur_texture <= 30:        
+            self.texture = self.move_textures[0]
+        elif self.cur_texture <=60:
+            self.texture = self.move_textures[1]
+        else:
+            self.cur_texture = 0
+        self.cur_texture += 1
+
+    def update(self):
+        self.update_animation()
+    
+    def unlock(self):
+        self.move_textures = self.unlock_textures
+        self.texture = self.move_textures[self.cur_texture]
+
+    def lock(self):
+        self.move_textures = self.lock_textures
+        self.texture = self.move_textures[self.cur_texture]
+
+
+class PlayerSprite(arcade.Sprite):
+
+    def __init__(self, filename, sprite_scaling):
+
+        super().__init__(filename, sprite_scaling)
+
+        self.center_x = PLAYER_START_X
+        self.center_y = PLAYER_START_Y
+
+        self.cur_texture = 0
+        self.move_textures = [
+            arcade.load_texture('./resources/images/robot_idle.png'),
+            arcade.load_texture('./resources/images/robot_walk0.png'),
+            arcade.load_texture('./resources/images/robot_walk1.png'),
+            arcade.load_texture('./resources/images/robot_walk2.png'),
+            arcade.load_texture('./resources/images/robot_walk3.png'),
+            arcade.load_texture('./resources/images/robot_walk4.png'),
+            arcade.load_texture('./resources/images/robot_walk5.png'),
+            arcade.load_texture('./resources/images/robot_walk6.png'),
+            arcade.load_texture('./resources/images/robot_walk7.png')
+        ]
+        self.texture = self.move_textures[self.cur_texture]
+
+    def update_animation(self, delta_time: float = 1 / 60):
+            if self.cur_texture <= 6:        
+                self.texture = self.move_textures[0]
+            elif self.cur_texture <=12:
+                self.texture = self.move_textures[1]
+            elif self.cur_texture <=18:
+                self.texture = self.move_textures[2]
+            elif self.cur_texture <=24:
+                self.texture = self.move_textures[3]
+            elif self.cur_texture <=30:
+                self.texture = self.move_textures[4]
+            elif self.cur_texture <=36:
+                self.texture = self.move_textures[5]
+            elif self.cur_texture <=42:
+                self.texture = self.move_textures[6]
+            elif self.cur_texture <=48:
+                self.texture = self.move_textures[7]
+            elif self.cur_texture <=54:
+                self.texture = self.move_textures[8]
+            else:
+                self.cur_texture = 0
+            self.cur_texture += 1
+
+    def update(self):
+        self.update_animation()
+
+
+class Ship(arcade.Sprite):
+
+    def __init__(self, filename, sprite_scaling):
+
+        super().__init__(filename, sprite_scaling)
+
+
+class Coin(arcade.Sprite):
+
+    def __init__(self, uid, _type, sprite_scaling):
+
+        super().__init__('./resources/images/slimeBlue.png', sprite_scaling)
+
+        self.uid = uid
+
+        self.change_x = 0
+        self.change_y = 0
+
+        self.cur_texture = 0
+
+        self._type = _type
+        if self._type == 0:
+            self.move_textures = [
+                arcade.load_texture('./resources/images/slimeBlue.png'),
+                arcade.load_texture('./resources/images/slimeBlue_move.png')
+            ]
+        elif self._type == 1:
+            self.move_textures = [
+                arcade.load_texture('./resources/images/slimeGreen.png'),
+                arcade.load_texture('./resources/images/slimeGreen_move.png')
+            ]
+        self.texture = self.move_textures[self.cur_texture]
+    
+    def update_animation(self, delta_time: float = 1 / 60):
+        if self.cur_texture <= 15:        
+            self.texture = self.move_textures[0]
+        elif self.cur_texture <=30:
+            self.texture = self.move_textures[1]
+        elif self.cur_texture <=45:
+            self.texture = self.move_textures[0]
+        elif self.cur_texture <=60:
+            self.texture = self.move_textures[1]
+        else:
+            self.cur_texture = 0
+        self.cur_texture += 1
+
+    def update(self):
+        self.update_animation()
+
+        # Move the coin
+        self.center_x += self.change_x
+        self.center_y += self.change_y
+
+        # If we are out-of-bounds, then 'bounce'
+        if self.left < 0:
+            self.change_x *= -1
+
+        if self.right > SCREEN_WIDTH:
+            self.change_x *= -1
+
+        if self.bottom < 0:
+            self.change_y *= -1
+
+        if self.top > SCREEN_HEIGHT:
+            self.change_y *= -1
+
+class Game(arcade.Window):
+    """ Our custom Window Class"""
+
+    def __init__(self):
+        """ Initializer """
+        # Call the parent class initializer
+        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
+
+        # Variables that will hold sprite lists
+        self.all_sprites_list = None
+        self.coin_list = None
+        self.global_coin_count = 0
+
+        # Set up the player info
+        self.player_sprite = None
+        self.score = 0
+        self.hit_ringggo = 0
+
+        self.ship_sprite_list = None
+
+        self.hit_check_frame = 0
+
+        # Don't show the mouse cursor
+        self.set_mouse_visible(False)
+
+        arcade.set_background_color(arcade.color.SPACE_CADET)
+
+    def generate_coin(self, coin_count, _type=0, x=0, y=0):
+        ''' create the coints '''
+        for i in range(coin_count):
+
+            # Create the coin instance
+            # Coin image from kenney.nl
+            coin = Coin(self.global_coin_count, _type, SPRITE_SCALING_COIN)
+            self.global_coin_count += 1
+            # Position the coin
+            if x > 0 and y > 0:
+                coin.center_x = x
+                coin.center_y = y
+            else:
+                coin.center_x = random.randrange(SCREEN_WIDTH)
+                coin.center_y = random.randrange(SCREEN_HEIGHT)
+            coin.change_x = random.randrange(-3, 4)
+            coin.change_y = random.randrange(-3, 4)
+
+            # Add the coin to the lists
+            self.all_sprites_list.append(coin)
+            self.coin_list.append(coin)
+
+    def sync_ship(self):
+        ''' synchronize position of ringggo'''
+        self.ship_sprite_list.clear()
+        for k, v in RtlsService().cars.items():
+            ship = Ship('./resources/images/shipGreen_manned.png', SPRITE_SCALING_SHIP)
+            ship.center_x = v['x']*SCREEN_SCALING
+            ship.center_y = v['y']*SCREEN_SCALING
+            self.ship_sprite_list.append(ship)
+
+    def setup(self):
+        """ Set up the game and initialize the variables. """
+
+        # Sprite lists
+        self.all_sprites_list = arcade.SpriteList()
+        self.coin_list = arcade.SpriteList()
+        self.ship_sprite_list = arcade.SpriteList()
+
+        # Score
+        self.score = 0
+        self.hit_ringggo = 0
+
+        # Sound
+        # self.bgm = arcade.Sound(':resources:music/funkyrobot.mp3')
+        # self.bgm.play(volume=1.0, pan=0.0, loop=False, speed=1.0)
+
+        # Set up the player
+        # Character image from kenney.nl
+        self.player_sprite = CrosshairSprite('./resources/images/crosshair137.png', SPRITE_SCALING_PLAYER)
+        # self.player_sprite = PlayerSprite('./resources/images/robot_idle.png', SPRITE_SCALING_PLAYER)
+        self.all_sprites_list.append(self.player_sprite)
+
+        # Create the coins
+        # self.generate_coin(COIN_COUNT_MAX)
+
+        # Sync ringggo car
+        self.sync_ship()
+
+    def on_draw(self):
+        """ Draw everything """
+        self.clear()
+        self.all_sprites_list.draw()
+        self.ship_sprite_list.draw()
+
+        # Put the text on the screen.
+        output = f"Score: {self.score}"
+        arcade.draw_text(output, 10, ARENA_HEIGHT-20, arcade.color.WHITE, 14)
+        output = f"RINGGGO: {len(self.ship_sprite_list)}"
+        arcade.draw_text(output, 10, ARENA_HEIGHT-40, arcade.color.WHITE_SMOKE, 14)
+        output = f"RINGGGO hit: {self.hit_ringggo}"
+        arcade.draw_text(output, 10, ARENA_HEIGHT-60, arcade.color.RED, 14)
+        output = f"Bubble: {len(self.coin_list)}"
+        arcade.draw_text(output, 10, ARENA_HEIGHT-80, arcade.color.GREEN, 14)
+
+        output = f"Width x Height: {ARENA_WIDTH} x {ARENA_HEIGHT}"
+        arcade.draw_text(output, ARENA_WIDTH-240, ARENA_HEIGHT-20, arcade.color.WHITE, 14)
+
+        output = f"Start X,Y: (0, 0)"
+        arcade.draw_text(output, 10, 20, arcade.color.WHITE, 14)
+
+    def on_mouse_motion(self, x, y, dx, dy):
+        """ Handle Mouse Motion """
+
+        # Move the center of the player sprite to match the mouse x, y
+        self.player_sprite.center_x = x
+        self.player_sprite.center_y = y
+
+    def on_update(self, delta_time):
+        """ Movement and game logic """
+
+        # Call update on all sprites (The sprites don't do much in this
+        # example though.)
+        self.all_sprites_list.update()
+        self.sync_ship()
+
+        GameService().clear()
+        for c in self.coin_list:
+            GameService().bubbles[c.uid] = dict(x=c.center_x, y=c.center_y, _type=c._type)
+
+        # Generate a list of all sprites that collided with the player.
+        hit_list = arcade.check_for_collision_with_list(self.player_sprite, self.coin_list)
+        # if hit_list:
+        #     self.player_sprite.lock()
+        # else:
+        #     self.player_sprite.unlock()
+        # Loop through each colliding sprite, remove it, and add to the score.
+        for coin in hit_list:
+            coin.remove_from_sprite_lists()
+            self.score += 1
+        
+        if self.hit_check_frame > 60:
+            for r in self.ship_sprite_list:
+                ship_hit_list = arcade.check_for_collision_with_list(r, self.ship_sprite_list)
+                for hit in ship_hit_list:
+                    self.hit_ringggo += 1
+                    if len(self.coin_list) <= COIN_COUNT_MAX:
+                        self.generate_coin(1, 1, hit.center_x, hit.center_y)
+            if len(self.coin_list) <= COIN_COUNT_MAX:
+                self.generate_coin(2, 0)
+            self.hit_check_frame = 0
+        else:
+            self.hit_check_frame += 1
+
+
+class GameService(metaclass=Singleton):
+    def __init__(self, *args, **kwargs):
+        self.bubbles = dict()
+    
+    def get_bubbles(self) -> bubble_model.Bubbles:
+        bs_obj = bubble_model.Bubbles()
+        for k, v in self.bubbles.items():
+            vec = bubble_model.Vec2(x=v['x'], y=v['y'])
+            bm = bubble_model.Bubble(
+                uid=k,
+                pos_cur=vec,
+                pos_target=vec,
+                speed=0.0,
+                type=v['_type'])
+            bs_obj.bubbles.append(bm)
+        return bs_obj
+    
+    def clear(self):
+        self.bubbles.clear()
 
 
 class RtlsService(metaclass=Singleton):
@@ -300,7 +655,7 @@ class Echo(protocol.Protocol):
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.bubble_status and req.Sender() == Sender.Sender.client:
             self.log.info('request bubble_status command OK')
-            res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=RtlsService().get_bubbles().bubbles)
+            res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=GameService().get_bubbles().bubbles)
             # res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=self.bubbles.bubbles)
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.player_get and req.Sender() == Sender.Sender.client:
@@ -377,14 +732,12 @@ class ScheduleTask:
     def run_ping_task(cls, users, players, bubbles):
         cls.log.info('ping task: {}'.format(datetime.now()))
         cls.log.info(str(players))
-        # cls.log.info(str(bubbles))
-        # cls.log.info(str(RtlsService().get_bubbles()))
         for u in users.values():
             req = request_packet_builder(Command.Command.ping, Sender.Sender.server)
             cls.log.debug(str(req))
             u.transport.write(bytes(req))
 
-            res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=RtlsService().get_bubbles().bubbles)
+            res = response_packet_builder(Command.Command.bubble_status, error_code=0, data=GameService().get_bubbles().bubbles)
             u.transport.write(bytes(res))
 
 
@@ -538,7 +891,22 @@ def main(port, ping, log_level, rtls, joycon):
     log.info('Let\'s go ANTIFRAGILE')
     rhost, rport = rtls.split(':')
     reactor.listenUDP(0, RtlsProtocol(rhost, int(rport)))
-    reactor.run()
+
+    def shutdown_handler(_=None, __=None):
+        arcade.exit()
+        reactor.callFromThread(reactor.stop)
+
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGTERM, shutdown_handler)
+
+    threading.Thread(target=reactor.run, args=(False,)).start()
+
+    GameService()
+
+    game = Game()
+    game.setup()
+    arcade.run()
+
 
 if __name__ == '__main__':
     main()

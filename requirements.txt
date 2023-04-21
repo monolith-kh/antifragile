@@ -6,3 +6,4 @@ Faker==17.6.0
 joycon-python==0.2.4
 hidapi==0.13.1
 PyGLM==2.7.0
+arcade==2.6.17
