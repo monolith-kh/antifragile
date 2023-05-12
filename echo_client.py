@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import time
+import random
 from datetime import datetime
 import click
 from faker import Faker
@@ -79,24 +80,7 @@ class EchoClient(protocol.Protocol):
             self.transport.write(bytes(res))
             print('response ping command')
         elif req.Command() == Command.Command.bubble_get:
-            bubble = Bubble.Bubble()
-            bubble.Init(req.Data().Bytes, req.Data().Pos)
-            pos_cur = bubble_model.Vec2(
-                x=bubble.PosCur().X(),
-                y=bubble.PosCur().Y()
-            )
-            pos_target = bubble_model.Vec2(
-                x=bubble.PosTarget().X(),
-                y=bubble.PosTarget().Y()
-            )
-            bm = bubble_model.Bubble(
-                uid=bubble.Uid(),
-                pos_cur=pos_cur,
-                pos_target=pos_target,
-                speed=bubble.Speed(),
-                type=bubble.Type()
-            )
-            print(bm)
+            print('response bubble_get command')
         elif req.Command() == Command.Command.bubble_status:
             bubbles = Bubbles.Bubbles()
             bubbles.Init(req.Data().Bytes, req.Data().Pos)
@@ -222,7 +206,15 @@ def run_bubble_status_task(factory):
 def run_bubble_get_task(factory):
     print('bubble get task: {}'.format(datetime.now()))
     print(factory)
-    req = request_packet_builder(Command.Command.bubble_get, Sender.Sender.client)
+    vec = bubble_model.Vec2(x=0, y=0)
+    bubble = bubble_model.Bubble(
+            uid=random.randrange(10),
+            pos_cur=vec,
+            pos_target=vec,
+            speed=0.0,
+            type=bubble_model.BubbleType.normal
+        )
+    req = request_packet_builder(command=Command.Command.bubble_get, sender=Sender.Sender.client, data=bubble)
     print(req)
     if factory.proto:
         factory.proto.transport.write(bytes(req))
@@ -250,35 +242,35 @@ def main(host, port, uid):
     ef = EchoFactory(uid)
     ep.connect(ef)
 
-    loop_game_ready = task.LoopingCall(run_game_ready_task, ef)
-    loop_game_ready_deferred = loop_game_ready.start(11.5, False)
-    loop_game_ready_deferred.addCallback(cbLoopDone)
-    loop_game_ready_deferred.addErrback(ebLoopFailed)
+    # loop_game_ready = task.LoopingCall(run_game_ready_task, ef)
+    # loop_game_ready_deferred = loop_game_ready.start(11.5, False)
+    # loop_game_ready_deferred.addCallback(cbLoopDone)
+    # loop_game_ready_deferred.addErrback(ebLoopFailed)
 
-    loop_player_status = task.LoopingCall(run_player_status_task, ef)
-    loop_player_status_deferred = loop_player_status.start(2.0, False)
-    loop_player_status_deferred.addCallback(cbLoopDone)
-    loop_player_status_deferred.addErrback(ebLoopFailed)
+    # loop_player_status = task.LoopingCall(run_player_status_task, ef)
+    # loop_player_status_deferred = loop_player_status.start(2.0, False)
+    # loop_player_status_deferred.addCallback(cbLoopDone)
+    # loop_player_status_deferred.addErrback(ebLoopFailed)
 
-    loop_player_get = task.LoopingCall(run_player_get_task, ef)
-    loop_player_get_deferred = loop_player_get.start(7.0, False)
-    loop_player_get_deferred.addCallback(cbLoopDone)
-    loop_player_get_deferred.addErrback(ebLoopFailed)
+    # loop_player_get = task.LoopingCall(run_player_get_task, ef)
+    # loop_player_get_deferred = loop_player_get.start(7.0, False)
+    # loop_player_get_deferred.addCallback(cbLoopDone)
+    # loop_player_get_deferred.addErrback(ebLoopFailed)
 
-    loop_bubble_status = task.LoopingCall(run_bubble_status_task, ef)
-    loop_bubble_status_deferred = loop_bubble_status.start(4.0, False)
-    loop_bubble_status_deferred.addCallback(cbLoopDone)
-    loop_bubble_status_deferred.addErrback(ebLoopFailed)
+    # loop_bubble_status = task.LoopingCall(run_bubble_status_task, ef)
+    # loop_bubble_status_deferred = loop_bubble_status.start(4.0, False)
+    # loop_bubble_status_deferred.addCallback(cbLoopDone)
+    # loop_bubble_status_deferred.addErrback(ebLoopFailed)
 
     loop_bubble_get = task.LoopingCall(run_bubble_get_task, ef)
-    loop_bubble_get_deferred = loop_bubble_get.start(9.0, False)
+    loop_bubble_get_deferred = loop_bubble_get.start(2.0, False)
     loop_bubble_get_deferred.addCallback(cbLoopDone)
     loop_bubble_get_deferred.addErrback(ebLoopFailed)
 
-    loop_ping = task.LoopingCall(run_send_loop_task, ef)
-    loop_ping_deferred = loop_ping.start(10.0, False)
-    loop_ping_deferred.addCallback(cbLoopDone)
-    loop_ping_deferred.addErrback(ebLoopFailed)
+    # loop_ping = task.LoopingCall(run_send_loop_task, ef)
+    # loop_ping_deferred = loop_ping.start(10.0, False)
+    # loop_ping_deferred.addCallback(cbLoopDone)
+    # loop_ping_deferred.addErrback(ebLoopFailed)
 
     reactor.run()
 

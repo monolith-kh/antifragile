@@ -15,7 +15,15 @@ def request_packet_builder(command: Command.Command, sender: Sender.Sender, data
     elif command == Command.Command.ping:
         pass
     elif command == Command.Command.bubble_get:
-        pass
+        Bubble.BubbleStart(builder)
+        Bubble.BubbleAddUid(builder, data.uid)
+        pos_cur = Vec2.CreateVec2(builder, data.pos_cur.x, data.pos_cur.y)
+        Bubble.BubbleAddPosCur(builder, pos_cur)
+        pos_target = Vec2.CreateVec2(builder, data.pos_target.x, data.pos_target.y)
+        Bubble.BubbleAddPosTarget(builder, pos_target)
+        Bubble.BubbleAddSpeed(builder, data.speed)
+        Bubble.BubbleAddType(builder, data.type)
+        data_pos = Bubble.BubbleEnd(builder)
     elif command == Command.Command.bubble_status:
         pass
     elif command == Command.Command.player_get:
@@ -96,15 +104,7 @@ def response_packet_builder(command: Command.Command, error_code: int = 0, data:
     elif command == Command.Command.ping:
         pass
     elif command == Command.Command.bubble_get:
-        Bubble.BubbleStart(builder)
-        Bubble.BubbleAddUid(builder, data.uid)
-        pos_cur = Vec2.CreateVec2(builder, data.pos_cur.x, data.pos_cur.y)
-        Bubble.BubbleAddPosCur(builder, pos_cur)
-        pos_target = Vec2.CreateVec2(builder, data.pos_target.x, data.pos_target.y)
-        Bubble.BubbleAddPosTarget(builder, pos_target)
-        Bubble.BubbleAddSpeed(builder, data.speed)
-        Bubble.BubbleAddType(builder, data.type)
-        data_pos = Bubble.BubbleEnd(builder)
+        pass
     elif command == Command.Command.bubble_status:
         bubbles_list = []
         for d in data:

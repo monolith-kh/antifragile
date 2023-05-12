@@ -6,9 +6,12 @@ import signal
 import threading
 from datetime import datetime
 
+from queue import Queue
+
 import click
 
 import arcade
+import math
 import random
 
 from twisted.internet import protocol, reactor, endpoints, task, threads
@@ -99,26 +102,20 @@ class JoyconService(metaclass=Singleton):
             return {}
 
     def set_paring_right(self):
-        if self.is_connect_right():
+        joycon_r_id = get_R_id()
+        if joycon_r_id[0]:
+            self.joycon_r = RumbleJoyCon(*joycon_r_id) 
             return True
         else:
-            joycon_r_id = get_R_id()
-            if joycon_r_id[0]:
-                self.joycon_r = RumbleJoyCon(*joycon_r_id) 
-                return True
-            else:
-                return False
+            return False
 
     def set_paring_left(self):
-        if self.is_connect_left():
+        joycon_l_id = get_L_id()
+        if joycon_l_id[0]:
+            self.joycon_l = RumbleJoyCon(*joycon_l_id) 
             return True
         else:
-            joycon_l_id = get_L_id()
-            if joycon_l_id[0]:
-                self.joycon_l = RumbleJoyCon(*joycon_l_id) 
-                return True
-            else:
-                return False
+            return False
 
     def get_status_right(self):
         if self.is_connect_right():
@@ -164,24 +161,156 @@ SCREEN_HEIGHT = ARENA_HEIGHT * SCREEN_SCALING
 SCREEN_TITLE = "Starting Game(by RTLS - RINGGGO)"
 
 SPRITE_SCALING_PLAYER = 0.5
-# SPRITE_SCALING_PLAYER = 0.5
 SPRITE_SCALING_COIN = 1.0
 # SPRITE_SCALING_COIN = 0.2
-COIN_COUNT_MAX = 30
+COIN_COUNT_MAX = 10
 SPRITE_SCALING_SHIP = 1.0
 
-PLAYER_START_X = 100
-PLAYER_START_Y = 100
+JOYSTICK_NAME = '8BitDo Lite 2'
+
+
+# --- Explosion Particles Related
+
+# How fast the particle will accelerate down. Make 0 if not desired
+PARTICLE_GRAVITY = 0.05
+
+# How fast to fade the particle
+PARTICLE_FADE_RATE = 8
+
+# How fast the particle moves. Range is from 2.5 <--> 5 with 2.5 and 2.5 set.
+PARTICLE_MIN_SPEED = 2.5
+PARTICLE_SPEED_RANGE = 2.5
+
+# How many particles per explosion
+PARTICLE_COUNT = 20
+
+# How big the particle
+PARTICLE_RADIUS = 12
+
+# Possible particle colors
+PARTICLE_SKY_COLORS = [arcade.color.SKY_BLUE,
+                       arcade.color.DEEP_SKY_BLUE,
+                       arcade.color.SKY_MAGENTA,
+                       arcade.color.VIVID_SKY_BLUE,
+                       arcade.color.LIGHT_SKY_BLUE]
+
+PARTICLE_GREEN_COLORS = [arcade.color.UFO_GREEN,
+                         arcade.color.NEON_GREEN,
+                         arcade.color.DEEP_JUNGLE_GREEN,
+                         arcade.color.GO_GREEN,
+                         arcade.color.LIGHT_GREEN]
+
+# PARTICLE_COLORS = [arcade.color.ALIZARIN_CRIMSON,
+#                    arcade.color.COQUELICOT,
+#                    arcade.color.LAVA,
+#                    arcade.color.KU_CRIMSON,
+#                    arcade.color.DARK_TANGERINE]
+
+# Chance we'll flip the texture to white and make it 'sparkle'
+PARTICLE_SPARKLE_CHANCE = 0.02
+
+# --- Smoke
+# Note: Adding smoke trails makes for a lot of sprites and can slow things
+# down. If you want a lot, it will be necessary to move processing to GPU
+# using transform feedback. If to slow, just get rid of smoke.
+
+# Start scale of smoke, and how fast is scales up
+SMOKE_START_SCALE = 1.0
+SMOKE_EXPANSION_RATE = 0.1
+
+# Rate smoke fades, and rises
+SMOKE_FADE_RATE = 7
+SMOKE_RISE_RATE = 0.5
+
+# Chance we leave smoke trail
+SMOKE_CHANCE = 0.25
+
+
+class Smoke(arcade.SpriteCircle):
+    """ This represents a puff of smoke """
+    def __init__(self, size):
+        super().__init__(size, arcade.color.LIGHT_GRAY, soft=True)
+        self.change_y = SMOKE_RISE_RATE
+        self.scale = SMOKE_START_SCALE
+
+    def update(self):
+        """ Update this particle """
+        if self.alpha <= PARTICLE_FADE_RATE:
+            # Remove faded out particles
+            self.remove_from_sprite_lists()
+        else:
+            # Update values
+            self.alpha -= SMOKE_FADE_RATE
+            self.center_x += self.change_x
+            self.center_y += self.change_y
+            self.scale += SMOKE_EXPANSION_RATE
+
+
+class Particle(arcade.SpriteCircle):
+    """ Explosion particle """
+    def __init__(self, my_list, particle_colors):
+        # Choose a random color
+        color = random.choice(particle_colors)
+
+        # Make the particle
+        super().__init__(PARTICLE_RADIUS, color)
+
+        # Track normal particle texture, so we can 'flip' when we sparkle.
+        self.normal_texture = self.texture
+
+        # Keep track of the list we are in, so we can add a smoke trail
+        self.my_list = my_list
+
+        # Set direction/speed
+        speed = random.random() * PARTICLE_SPEED_RANGE + PARTICLE_MIN_SPEED
+        direction = random.randrange(360)
+        self.change_x = math.sin(math.radians(direction)) * speed
+        self.change_y = math.cos(math.radians(direction)) * speed
+
+        # Track original alpha. Used as part of 'sparkle' where we temp set the
+        # alpha back to 255
+        self.my_alpha = 255
+
+        # What list do we add smoke particles to?
+        self.my_list = my_list
+
+    def update(self):
+        """ Update the particle """
+        if self.my_alpha <= PARTICLE_FADE_RATE:
+            # Faded out, remove
+            self.remove_from_sprite_lists()
+        else:
+            # Update
+            self.my_alpha -= PARTICLE_FADE_RATE
+            self.alpha = self.my_alpha
+            self.center_x += self.change_x
+            self.center_y += self.change_y
+            self.change_y -= PARTICLE_GRAVITY
+
+            # Should we sparkle this?
+            if random.random() <= PARTICLE_SPARKLE_CHANCE:
+                self.alpha = 255
+                self.texture = arcade.make_circle_texture(int(self.width),
+                                                          arcade.color.WHITE)
+            else:
+                self.texture = self.normal_texture
+
+            # Leave a smoke particle?
+            if random.random() <= SMOKE_CHANCE:
+                smoke = Smoke(5)
+                smoke.position = self.position
+                self.my_list.append(smoke)
 
 
 class CrosshairSprite(arcade.Sprite):
+    START_XY = (100, 100)
 
     def __init__(self, filename, sprite_scaling):
 
         super().__init__(filename, sprite_scaling)
 
-        self.center_x = PLAYER_START_X
-        self.center_y = PLAYER_START_Y
+        self.center_x = self.START_XY[0]
+        self.center_y = self.START_XY[1]
 
         self.cur_texture = 0
         self.unlock_textures = [
@@ -189,8 +318,8 @@ class CrosshairSprite(arcade.Sprite):
             arcade.load_texture('./resources/images/crosshair138.png')
         ]
         self.lock_textures = [
-            arcade.load_texture('./resources/images/crosshair132.png'),
-            arcade.load_texture('./resources/images/crosshair132.png')
+            arcade.load_texture('./resources/images/crosshair026.png'),
+            arcade.load_texture('./resources/images/crosshair027.png')
         ]
         self.move_textures = self.unlock_textures
         self.texture = self.move_textures[self.cur_texture]
@@ -206,24 +335,27 @@ class CrosshairSprite(arcade.Sprite):
 
     def update(self):
         self.update_animation()
-    
+        
     def unlock(self):
         self.move_textures = self.unlock_textures
-        self.texture = self.move_textures[self.cur_texture]
+        # self.texture = self.move_textures[self.cur_texture%2]
 
     def lock(self):
         self.move_textures = self.lock_textures
-        self.texture = self.move_textures[self.cur_texture]
+        # self.texture = self.move_textures[self.cur_texture%2]
 
 
 class PlayerSprite(arcade.Sprite):
+    START_X = 100
+    START_Y = 100
+
 
     def __init__(self, filename, sprite_scaling):
 
         super().__init__(filename, sprite_scaling)
 
-        self.center_x = PLAYER_START_X
-        self.center_y = PLAYER_START_Y
+        self.center_x = self.START_X
+        self.center_y = self.START_Y
 
         self.cur_texture = 0
         self.move_textures = [
@@ -264,7 +396,6 @@ class PlayerSprite(arcade.Sprite):
 
     def update(self):
         self.update_animation()
-
 
 class Ship(arcade.Sprite):
 
@@ -332,13 +463,40 @@ class Coin(arcade.Sprite):
         if self.top > SCREEN_HEIGHT:
             self.change_y *= -1
 
+
+class FlyingSprite(arcade.Sprite):
+    '''Base class for all flying sprites
+    Flying sprites include meteors
+    '''
+
+    def update(self):
+        '''Update the position of the sprite
+        When it moves off screen to the left, remove it
+        '''
+
+        # Move the sprite
+        super().update()
+
+        # Remove if off the screen
+        if self.right < 0:
+            self.remove_from_sprite_lists()
+
+
 class Game(arcade.Window):
-    """ Our custom Window Class"""
+    ''' Our custom Window Class '''
+    MOVEMENT_SPEED = 10
+    DEAD_ZONE = 0.05
 
     def __init__(self):
-        """ Initializer """
+        ''' Initializer '''
         # Call the parent class initializer
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
+
+        # Sounds
+        self.background_music = None
+        self.shoot_sound = None
+        self.shoot_success_sound = None
+        self.shoot_fail_sound = None
 
         # Variables that will hold sprite lists
         self.all_sprites_list = None
@@ -352,12 +510,62 @@ class Game(arcade.Window):
 
         self.ship_sprite_list = None
 
+        self.explosions_list = None
+
+        self.meteors_list = None
+
         self.hit_check_frame = 0
 
         # Don't show the mouse cursor
         self.set_mouse_visible(False)
 
+        self.joystick = None
+        joysticks = arcade.get_joysticks()
+        if joysticks:
+            for j in joysticks:
+                if j.device.name == JOYSTICK_NAME:
+                    self.joystick = j
+                    self.joystick.open()
+                    self.joystick.push_handlers(self)
+        else:
+            print('There are no joysticks, plug in a joystick and run again.')
+            self.joystick = None
+
         arcade.set_background_color(arcade.color.SPACE_CADET)
+
+    def add_meteor(self, delta_time: float):
+        '''Adds a new meteor to the screen
+
+        Arguments:
+            delta_time {float} -- How much time has passed since the last call
+        '''
+
+        METEOR_LIST = [
+            './resources/images/meteorGrey_big1.png',
+            './resources/images/meteorGrey_big2.png',
+            './resources/images/meteorGrey_big3.png',
+            './resources/images/meteorGrey_big4.png',
+            './resources/images/meteorGrey_med1.png',
+            './resources/images/meteorGrey_med2.png',
+            './resources/images/meteorGrey_small1.png',
+            './resources/images/meteorGrey_small1.png',
+            './resources/images/meteorGrey_tiny1.png',
+            './resources/images/meteorGrey_tiny2.png'
+        ]
+
+        # First, create the new meteor sprite
+        meteor = FlyingSprite(METEOR_LIST[random.randrange(10)], 1.5)
+
+        # Set its position to a random height and off screen right
+        meteor.left = random.randint(self.width, self.width + 80)
+        meteor.top = random.randint(10, self.height - 10)
+
+        # Set its speed to a random speed heading left
+        meteor.velocity = (random.randint(-5, -2), 0)
+
+        # Add it to the meteor list
+        self.meteors_list.append(meteor)
+        self.all_sprites_list.append(meteor)
 
     def generate_coin(self, coin_count, _type=0, x=0, y=0):
         ''' create the coints '''
@@ -374,8 +582,8 @@ class Game(arcade.Window):
             else:
                 coin.center_x = random.randrange(SCREEN_WIDTH)
                 coin.center_y = random.randrange(SCREEN_HEIGHT)
-            coin.change_x = random.randrange(-3, 4)
-            coin.change_y = random.randrange(-3, 4)
+            coin.change_x = random.randrange(-1, 2)
+            coin.change_y = random.randrange(-1, 2)
 
             # Add the coin to the lists
             self.all_sprites_list.append(coin)
@@ -397,6 +605,8 @@ class Game(arcade.Window):
         self.all_sprites_list = arcade.SpriteList()
         self.coin_list = arcade.SpriteList()
         self.ship_sprite_list = arcade.SpriteList()
+        self.explosions_list = arcade.SpriteList()
+        self.meteors_list = arcade.SpriteList()
 
         # Score
         self.score = 0
@@ -418,21 +628,59 @@ class Game(arcade.Window):
         # Sync ringggo car
         self.sync_ship()
 
+        # Spawn a new meteor every second
+        arcade.schedule(self.add_meteor, 2.0)
+
+        # Load sounds
+        self.background_music = arcade.load_sound('./resources/music/funkyrobot.wav')
+        self.shoot_sound = arcade.load_sound('./resources/sounds/upgrade1.wav')
+        self.shoot_success_sound = arcade.load_sound('./resources/sounds/upgrade3.wav')
+        self.shoot_fail_sound = arcade.load_sound('./resources/sounds/upgrade2.wav')
+
+        # Play BGM
+        arcade.play_sound(self.background_music, volume=1.5, looping=True)
+
+    def shoot(self):
+        hit_list = arcade.check_for_collision_with_list(self.player_sprite, self.coin_list)
+        if hit_list:
+            for coin in hit_list:
+                # Make an explosion
+                for i in range(PARTICLE_COUNT):
+                    if coin._type == 0:
+                        particle = Particle(self.explosions_list, PARTICLE_SKY_COLORS)
+                    elif coin._type == 1:
+                        particle = Particle(self.explosions_list, PARTICLE_GREEN_COLORS)
+                    particle.position = coin.position
+                    self.explosions_list.append(particle)
+                smoke = Smoke(50)
+                smoke.position = coin.position
+                self.explosions_list.append(smoke)
+                if coin._type == 0:
+                    self.score += 50
+                elif coin._type == 1:
+                    self.score += 100
+                coin.remove_from_sprite_lists()
+                arcade.play_sound(self.shoot_success_sound, volume=1.5)
+        else:
+            arcade.play_sound(self.shoot_fail_sound, volume=1.5)
+
     def on_draw(self):
         """ Draw everything """
         self.clear()
-        self.all_sprites_list.draw()
         self.ship_sprite_list.draw()
+        self.all_sprites_list.draw()
+        self.player_sprite.draw()
+        self.explosions_list.draw()
 
         # Put the text on the screen.
-        output = f"Score: {self.score}"
-        arcade.draw_text(output, 10, ARENA_HEIGHT-20, arcade.color.WHITE, 14)
+        output = 'Score: {:,}'.format(self.score)
+        arcade.draw_text(output, 10, ARENA_HEIGHT-40, arcade.color.WHITE, 34)
         output = f"RINGGGO: {len(self.ship_sprite_list)}"
-        arcade.draw_text(output, 10, ARENA_HEIGHT-40, arcade.color.WHITE_SMOKE, 14)
+        arcade.draw_text(output, 10, ARENA_HEIGHT-60, arcade.color.BLUE, 14)
         output = f"RINGGGO hit: {self.hit_ringggo}"
-        arcade.draw_text(output, 10, ARENA_HEIGHT-60, arcade.color.RED, 14)
+        arcade.draw_text(output, 10, ARENA_HEIGHT-80, arcade.color.RED, 14)
         output = f"Bubble: {len(self.coin_list)}"
-        arcade.draw_text(output, 10, ARENA_HEIGHT-80, arcade.color.GREEN, 14)
+        arcade.draw_text(output, 10, ARENA_HEIGHT-100, arcade.color.GREEN, 14)
 
         output = f"Width x Height: {ARENA_WIDTH} x {ARENA_HEIGHT}"
         arcade.draw_text(output, ARENA_WIDTH-240, ARENA_HEIGHT-20, arcade.color.WHITE, 14)
@@ -447,6 +695,15 @@ class Game(arcade.Window):
         self.player_sprite.center_x = x
         self.player_sprite.center_y = y
 
+    def on_mouse_press(self, x: int, y: int, button: int, modifiers: int):
+        print(x, y, button, modifiers)
+        return super().on_mouse_press(x, y, button, modifiers)
+    
+    def on_mouse_release(self, x: int, y: int, button: int, modifiers: int):
+        print(x, y, button, modifiers)
+        self.shoot()
+        return super().on_mouse_release(x, y, button, modifiers)
+
     def on_update(self, delta_time):
         """ Movement and game logic """
 
@@ -454,21 +711,32 @@ class Game(arcade.Window):
         # example though.)
         self.all_sprites_list.update()
         self.sync_ship()
+        self.ship_sprite_list.update()
 
+        self.explosions_list.update()
+
+        if not GameService().q.empty():
+            uid = GameService().q.get()
+            for c in self.coin_list:
+                if uid == c.uid:
+                    c.remove_from_sprite_lists()
+                    print('removed bubble uid: {}'.format(uid))
+                else:
+                    print('invalid bubble uid: {}'.format(uid))
         GameService().clear()
         for c in self.coin_list:
             GameService().bubbles[c.uid] = dict(x=c.center_x, y=c.center_y, _type=c._type)
 
         # Generate a list of all sprites that collided with the player.
-        hit_list = arcade.check_for_collision_with_list(self.player_sprite, self.coin_list)
-        # if hit_list:
-        #     self.player_sprite.lock()
-        # else:
-        #     self.player_sprite.unlock()
+        lock_list = arcade.check_for_collision_with_list(self.player_sprite, self.coin_list)
+        if lock_list:
+            self.player_sprite.lock()
+        else:
+            self.player_sprite.unlock()
         # Loop through each colliding sprite, remove it, and add to the score.
-        for coin in hit_list:
-            coin.remove_from_sprite_lists()
-            self.score += 1
+        # for coin in lock_list:
+        #     coin.remove_from_sprite_lists()
+        #     self.score += 1
         
         if self.hit_check_frame > 60:
             for r in self.ship_sprite_list:
@@ -482,11 +750,36 @@ class Game(arcade.Window):
             self.hit_check_frame = 0
         else:
             self.hit_check_frame += 1
+        
+        if self.joystick:
+            self.player_sprite.change_x = self.joystick.x * self.MOVEMENT_SPEED
+            if abs(self.player_sprite.change_x) < self.DEAD_ZONE:
+                self.player_sprite.change_x = 0
+            self.player_sprite.change_y = -self.joystick.y * self.MOVEMENT_SPEED
+            if abs(self.player_sprite.change_y) < self.DEAD_ZONE:
+                self.player_sprite.change_y = 0
+        
+        self.player_sprite.center_x += self.player_sprite.change_x
+        self.player_sprite.center_y += self.player_sprite.change_y
+
+    def on_joybutton_press(self, _joystick, button):
+        if button == 9:
+            arcade.play_sound(self.shoot_sound, volume=1.0)
+        print('Button {} down'.format(button))
+
+    def on_joybutton_release(self, _joystick, button):
+        if button == 9:
+            self.shoot()
+        print('Button {} up'.format(button))
+
+    def on_joyhat_motion(self, _joystick, hat_x, hat_y):
+        print('Hat ({}, {})'.format(hat_x, hat_y))
 
 
 class GameService(metaclass=Singleton):
     def __init__(self, *args, **kwargs):
         self.bubbles = dict()
+        self.q = Queue(32)
     
     def get_bubbles(self) -> bubble_model.Bubbles:
         bs_obj = bubble_model.Bubbles()
@@ -651,7 +944,10 @@ class Echo(protocol.Protocol):
             res = bytearray()
         elif req.Command() == Command.Command.bubble_get and req.Sender() == Sender.Sender.client:
             self.log.info('request bubble_get command OK')
-            res = response_packet_builder(Command.Command.bubble_get, error_code=0, data=self.bubbles.bubbles[3])
+            bubble = Bubble.Bubble()
+            bubble.Init(req.Data().Bytes, req.Data().Pos)
+            GameService().q.put(bubble.Uid())
+            res = response_packet_builder(Command.Command.bubble_get, error_code=0)
             self.transport.write(bytes(res))
         elif req.Command() == Command.Command.bubble_status and req.Sender() == Sender.Sender.client:
             self.log.info('request bubble_status command OK')
@@ -793,6 +1089,7 @@ class ScheduleTask:
     @classmethod
     def run_joycon_event_task(cls, users):
         cls.log.debug('joycon event task: {}'.format(datetime.now()))
+        JoyconService()
         left = JoyconService().get_status_left()
         right = JoyconService().get_status_right()
         if left and right:
@@ -822,11 +1119,6 @@ class ScheduleTask:
             cls.prev_zr = right['buttons']['right']['zr']
         else:
             print('disconnected')
-            if JoyconService().set_paring_left():
-                print('paired left')
-            if JoyconService().set_paring_right():
-                print('paired right')
-
 
     @classmethod
     def cbLoopDone(cls, result):
@@ -865,8 +1157,6 @@ def main(port, ping, log_level, rtls, joycon):
     observer._encoding = 'utf-8'
     globalLogPublisher.addObserver(observer)
 
-    JoyconService()
-
     ep = endpoints.TCP4ServerEndpoint(reactor, port)
     ef = EchoFactory()
     ep.listen(ef)
@@ -904,6 +1194,7 @@ def main(port, ping, log_level, rtls, joycon):
     GameService()
 
     game = Game()
+    game.center_window()
     game.setup()
     arcade.run()
 
